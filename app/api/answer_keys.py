@@ -1,9 +1,10 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, get_user_project
 from app.config import settings
 from app.models.answer_key import AnswerKey
 from app.models.project import Project, ProjectStatus
@@ -16,27 +17,15 @@ from app.services.storage import get_storage_service
 router = APIRouter(prefix="/projects/{project_id}/answer-key", tags=["Answer Keys"])
 
 
-def _get_user_project(project_id: str, db: Session, current_user: User) -> Project:
-    """Get a project belonging to the current user."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    return project
-
-
 @router.post("/upload", response_model=AnswerKeyResponse, status_code=status.HTTP_201_CREATED)
 async def upload_answer_key(
     project_id: str,
     file: UploadFile,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> AnswerKey:
     """Upload an answer key file (PDF or image)."""
-    project = _get_user_project(project_id, db, current_user)
-
-    # Validate file type
     content_type = file.content_type or ""
     if not (content_type.startswith("image/") or content_type == "application/pdf"):
         raise HTTPException(
@@ -44,10 +33,8 @@ async def upload_answer_key(
             detail="File must be a PDF or image (PNG, JPG, etc.)",
         )
 
-    # Read file
     file_bytes = await file.read()
 
-    # Check file size
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise HTTPException(
@@ -55,16 +42,13 @@ async def upload_answer_key(
             detail=f"File size exceeds {settings.MAX_FILE_SIZE_MB}MB limit",
         )
 
-    # Determine file type
     file_type = "pdf" if content_type == "application/pdf" else "images"
     extension = ".pdf" if file_type == "pdf" else ".png"
     storage_path = f"answer_keys/{project_id}/{uuid4()}{extension}"
 
-    # Save file
     storage = get_storage_service()
     storage.save_file(file_bytes, storage_path)
 
-    # Delete existing answer key if any
     existing = db.query(AnswerKey).filter(AnswerKey.project_id == project_id).first()
     if existing:
         try:
@@ -74,7 +58,6 @@ async def upload_answer_key(
         db.delete(existing)
         db.flush()
 
-    # Create answer key record
     answer_key = AnswerKey(
         project_id=project_id,
         original_filename=file.filename,
@@ -84,11 +67,11 @@ async def upload_answer_key(
     )
     db.add(answer_key)
 
-    # Update project status
     project.status = ProjectStatus.ANSWER_KEY_UPLOADED.value
     db.commit()
     db.refresh(answer_key)
 
+    logger.info("Answer key uploaded for project {} by {}", project_id, current_user.email)
     return answer_key
 
 
@@ -96,15 +79,12 @@ async def upload_answer_key(
 def get_answer_key(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> AnswerKey:
     """Get the answer key for a project."""
-    _get_user_project(project_id, db, current_user)
-
     answer_key = db.query(AnswerKey).filter(AnswerKey.project_id == project_id).first()
     if answer_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer key not found")
-
     return answer_key
 
 
@@ -113,16 +93,17 @@ def process_answer_key(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> dict:
     """Process the answer key using OCR and AI extraction."""
-    project = _get_user_project(project_id, db, current_user)
-
     answer_key = db.query(AnswerKey).filter(AnswerKey.project_id == project_id).first()
     if answer_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer key not found")
 
+    logger.info("Processing answer key for project {} by {}", project_id, current_user.email)
     processor = DocumentProcessor()
     questions = processor.process_answer_key(db, answer_key, project)
+    logger.info("Extracted {} questions from answer key", len(questions))
 
     return {
         "id": answer_key.id,
@@ -140,10 +121,7 @@ def process_answer_key(
 @router.get("/questions", response_model=list[QuestionResponse])
 def get_extracted_questions(
     project_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> list:
     """Get extracted questions from the processed answer key."""
-    project = _get_user_project(project_id, db, current_user)
-
     return project.questions

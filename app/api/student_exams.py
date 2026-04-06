@@ -1,10 +1,11 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, get_user_project
 from app.config import settings
 from app.models.project import Project
 from app.models.student_exam import StudentExam
@@ -20,26 +21,15 @@ from app.services.storage import get_storage_service
 router = APIRouter(prefix="/projects/{project_id}/exams", tags=["Student Exams"])
 
 
-def _get_user_project(project_id: str, db: Session, current_user: User) -> Project:
-    """Get a project belonging to the current user."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    return project
-
-
 @router.post("/upload", response_model=list[StudentExamResponse], status_code=status.HTTP_201_CREATED)
 async def upload_student_exams(
     project_id: str,
     files: list[UploadFile],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> list[StudentExam]:
     """Upload one or more student exam files."""
-    _get_user_project(project_id, db, current_user)
-
     storage = get_storage_service()
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     created: list[StudentExam] = []
@@ -80,6 +70,7 @@ async def upload_student_exams(
     for exam in created:
         db.refresh(exam)
 
+    logger.info("Uploaded {} exams for project {} by {}", len(created), project_id, current_user.email)
     return created
 
 
@@ -87,11 +78,9 @@ async def upload_student_exams(
 def list_student_exams(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> dict:
     """List all student exams for a project."""
-    _get_user_project(project_id, db, current_user)
-
     exams = (
         db.query(StudentExam).filter(StudentExam.project_id == project_id).order_by(StudentExam.created_at.desc()).all()
     )
@@ -117,11 +106,9 @@ def get_student_exam(
     project_id: str,
     exam_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> dict:
     """Get student exam details with answers."""
-    _get_user_project(project_id, db, current_user)
-
     exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
@@ -160,11 +147,9 @@ def update_student_exam(
     exam_id: str,
     data: StudentExamUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> StudentExam:
     """Update student name or identifier for an exam."""
-    _get_user_project(project_id, db, current_user)
-
     exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
@@ -183,21 +168,19 @@ def delete_student_exam(
     project_id: str,
     exam_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
 ) -> None:
     """Delete a student exam."""
-    _get_user_project(project_id, db, current_user)
-
     exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
 
-    # Delete file from storage
     try:
         storage = get_storage_service()
         storage.delete_file(exam.file_path)
     except Exception:
         pass
 
+    logger.info("Deleted exam {} from project {}", exam_id, project_id)
     db.delete(exam)
     db.commit()

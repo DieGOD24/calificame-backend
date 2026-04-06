@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import fitz  # pymupdf
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.agents.answer_extraction_agent import AnswerExtractionAgent
@@ -31,6 +32,7 @@ class DocumentProcessor:
 
     def process_answer_key(self, db: Session, answer_key: AnswerKey, project: Project) -> list[Question]:
         """Process an answer key file to extract questions and answers via Vision AI."""
+        logger.info("Processing answer key for project {}", project.id)
         file_bytes = self.storage.get_file(answer_key.file_path)
 
         # Convert to images regardless of file type
@@ -76,6 +78,7 @@ class DocumentProcessor:
         db.commit()
         db.refresh(answer_key)
 
+        logger.info("Extracted {} questions from answer key (project {})", len(questions), project.id)
         return questions
 
     def process_student_exam(

@@ -1,15 +1,12 @@
 import io
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models.exam_answer import ExamAnswer
 from app.models.project import ProjectStatus
 from app.models.question import Question
-from app.models.student_exam import StudentExam
 from app.services.storage import LocalStorageService
 
 
@@ -177,67 +174,25 @@ class TestCompleteGradingFlow:
         exams_list = client.get(f"/api/v1/projects/{project_id}/exams/", headers=headers)
         assert exams_list.json()["total"] == 2
 
-        # ====== Step 8: Grade all exams (mocked AI) ======
-        with patch("app.api.grading.GradingService") as mock_grade_cls:
-            mock_grade_svc = MagicMock()
-            mock_grade_cls.return_value = mock_grade_svc
+        # ====== Step 8: Grade all exams (now returns TaskLog for background processing) ======
+        grade_response = client.post(
+            f"/api/v1/projects/{project_id}/grading/grade-all",
+            headers=headers,
+        )
+        assert grade_response.status_code == 200
+        task_log = grade_response.json()
+        assert task_log["task_type"] == "grading"
+        assert task_log["status"] == "pending"
+        assert task_log["project_id"] == project_id
+        assert "id" in task_log
 
-            def fake_grade_all(db, proj, regrade=False):
-                exams = db.query(StudentExam).filter(StudentExam.project_id == proj.id).all()
-                qs = (
-                    db.query(Question)
-                    .filter(Question.project_id == proj.id, Question.is_confirmed.is_(True))
-                    .order_by(Question.question_number)
-                    .all()
-                )
+        # ====== Step 9: Verify task endpoint works ======
+        task_id = task_log["id"]
+        task_response = client.get(f"/api/v1/tasks/{task_id}", headers=headers)
+        assert task_response.status_code == 200
+        assert task_response.json()["id"] == task_id
 
-                # Simulate grading: Alice gets 90%, Bob gets 70%
-                scores = {student_exam_ids[0]: [10, 10, 7], student_exam_ids[1]: [10, 7, 4]}
-
-                for exam in exams:
-                    exam_scores = scores.get(exam.id, [5, 5, 5])
-                    total = 0.0
-                    for i, q in enumerate(qs):
-                        s = float(exam_scores[i]) if i < len(exam_scores) else 0.0
-                        answer = ExamAnswer(
-                            id=str(uuid4()),
-                            student_exam_id=exam.id,
-                            question_id=q.id,
-                            extracted_answer=f"student answer {i + 1}",
-                            is_correct=s == q.points,
-                            score=s,
-                            max_score=q.points,
-                            feedback="Good" if s == q.points else "Partially correct",
-                            confidence=0.9,
-                        )
-                        db.add(answer)
-                        total += s
-
-                    exam.total_score = total
-                    exam.max_score = 30.0
-                    exam.grade_percentage = (total / 30.0) * 100
-                    exam.status = "graded"
-                    exam.graded_at = datetime.now(UTC)
-
-                proj.status = ProjectStatus.COMPLETED.value
-                db.commit()
-                for e in exams:
-                    db.refresh(e)
-                return exams
-
-            mock_grade_svc.grade_all_exams.side_effect = fake_grade_all
-
-            grade_response = client.post(
-                f"/api/v1/projects/{project_id}/grading/grade-all",
-                headers=headers,
-            )
-            assert grade_response.status_code == 200
-            graded = grade_response.json()
-            assert len(graded) == 2
-            assert all(e["status"] == "graded" for e in graded)
-
-        # ====== Step 9: Get results ======
-        # Summary
+        # ====== Step 10: Verify summary endpoint works (exams still pending since background hasn't run) ======
         summary_response = client.get(
             f"/api/v1/projects/{project_id}/grading/summary",
             headers=headers,
@@ -245,33 +200,8 @@ class TestCompleteGradingFlow:
         assert summary_response.status_code == 200
         summary = summary_response.json()
         assert summary["total_exams"] == 2
-        assert summary["graded_count"] == 2
-        assert summary["pending_count"] == 0
 
-        # Individual exam result
-        exam_detail = client.get(
-            f"/api/v1/projects/{project_id}/exams/{student_exam_ids[0]}",
-            headers=headers,
-        )
-        assert exam_detail.status_code == 200
-        detail = exam_detail.json()
-        assert detail["student_exam"]["status"] == "graded"
-        assert len(detail["answers"]) == 3
-
-        # ====== Step 10: Verify scores ======
-        # Alice: 10 + 10 + 7 = 27/30 = 90%
-        alice_exam = next(e for e in graded if e["id"] == student_exam_ids[0])
-        assert alice_exam["total_score"] == 27.0
-        assert alice_exam["max_score"] == 30.0
-        assert abs(alice_exam["grade_percentage"] - 90.0) < 0.1
-
-        # Bob: 10 + 7 + 4 = 21/30 = 70%
-        bob_exam = next(e for e in graded if e["id"] == student_exam_ids[1])
-        assert bob_exam["total_score"] == 21.0
-        assert bob_exam["max_score"] == 30.0
-        assert abs(bob_exam["grade_percentage"] - 70.0) < 0.1
-
-        # Export
+        # Export endpoint
         export_response = client.get(
             f"/api/v1/projects/{project_id}/grading/export",
             headers=headers,

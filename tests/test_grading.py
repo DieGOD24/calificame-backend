@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from app.models.exam_answer import ExamAnswer
 from app.models.project import Project
 from app.models.question import Question
-from app.models.student_exam import StudentExam
 from app.services.storage import LocalStorageService
 
 
@@ -115,36 +114,18 @@ class TestGradeAllExams:
         for _ in range(2):
             _create_student_exam(client, project.id, auth_headers, temp_storage)
 
-        with patch("app.api.grading.GradingService") as mock_svc_cls:
-            mock_svc = MagicMock()
-            mock_svc_cls.return_value = mock_svc
-
-            def fake_grade_all(db, proj, regrade=False):
-                from datetime import UTC, datetime
-
-                exams = db.query(StudentExam).filter(StudentExam.project_id == proj.id).all()
-                for exam in exams:
-                    exam.total_score = 10.0
-                    exam.max_score = 10.0
-                    exam.grade_percentage = 100.0
-                    exam.status = "graded"
-                    exam.graded_at = datetime.now(UTC)
-
-                db.commit()
-                for e in exams:
-                    db.refresh(e)
-                return exams
-
-            mock_svc.grade_all_exams.side_effect = fake_grade_all
-
-            response = client.post(
-                f"/api/v1/projects/{project.id}/grading/grade-all",
-                headers=auth_headers,
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert len(data) == 2
-            assert all(e["status"] == "graded" for e in data)
+        response = client.post(
+            f"/api/v1/projects/{project.id}/grading/grade-all",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # grade-all now returns a TaskLog for background processing
+        assert data["task_type"] == "grading"
+        assert data["status"] == "pending"
+        assert data["project_id"] == project.id
+        assert data["progress"] == 0.0
+        assert "id" in data
 
 
 class TestGradingSummary:

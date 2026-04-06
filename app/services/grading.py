@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.exam_answer import ExamAnswer
@@ -30,7 +31,7 @@ class GradingService:
         db.commit()
 
         try:
-            # Read the student exam file
+            logger.info("Grading exam {} for project {}", student_exam.id, student_exam.project_id)
             file_bytes = self.storage.get_file(student_exam.file_path)
 
             # Convert to images (PDF pages or raw image)
@@ -92,6 +93,7 @@ class GradingService:
             db.refresh(student_exam)
 
         except Exception as e:
+            logger.error("Error grading exam {}: {}", student_exam.id, str(e))
             student_exam.status = "error"
             student_exam.error_message = str(e)
             db.commit()
