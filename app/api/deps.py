@@ -5,7 +5,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models.user import User
+from app.models.project import Project
+from app.models.user import User, UserRole
 from app.services.auth import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -52,3 +53,35 @@ def get_current_active_user(
             detail="Inactive user",
         )
     return current_user
+
+
+def require_role(*roles: UserRole):
+    """Dependency factory that checks if the user has one of the required roles."""
+
+    def _check_role(current_user: User = Depends(get_current_active_user)) -> User:
+        if current_user.role == UserRole.DEVELOPER.value:
+            return current_user
+        if current_user.role not in [r.value for r in roles]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{current_user.role}' does not have permission for this action",
+            )
+        return current_user
+
+    return _check_role
+
+
+def get_user_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Project:
+    """Get a project belonging to the current user. Developer/Admin can access any project."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if current_user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
+        return project
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    return project
