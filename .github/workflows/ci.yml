@@ -46,10 +46,20 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Ruff check (linting)
-        run: ruff check app/ tests/ --output-format=github
+        run: ruff check app/ tests/ --output-format=github --fix
 
-      - name: Ruff format check
-        run: ruff format --check app/ tests/
+      - name: Ruff format
+        run: ruff format app/ tests/
+
+      - name: Verify no lint/format changes needed
+        run: |
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::error::The following files need ruff fixes. Run 'ruff check --fix . && ruff format .' locally:"
+            git diff --name-only
+            git diff --stat
+            exit 1
+          fi
+          echo "All files are properly linted and formatted"
 
   type-check:
     name: "Type Check (mypy)"
