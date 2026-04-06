@@ -72,6 +72,7 @@ def test_user(db: Session) -> User:
         email="test@example.com",
         hashed_password=hash_password("testpassword123"),
         full_name="Test User",
+        role="professor",
         is_active=True,
     )
     db.add(user)
@@ -88,6 +89,7 @@ def test_user_2(db: Session) -> User:
         email="other@example.com",
         hashed_password=hash_password("otherpassword123"),
         full_name="Other User",
+        role="professor",
         is_active=True,
     )
     db.add(user)
