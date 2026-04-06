@@ -1,5 +1,3 @@
-import io
-
 import fitz
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -56,7 +54,8 @@ def _file_to_page_image(file_bytes: bytes, file_type: str, page: int) -> bytes:
         doc.close()
         return img_bytes
     else:
-        # For images, just return the file (convert to PNG if needed)
+        import io
+
         from PIL import Image
 
         try:

@@ -1,5 +1,3 @@
-import os
-import tempfile
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
@@ -10,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_db
 from app.database import Base
 from app.main import app
 from app.models.project import Project, ProjectStatus

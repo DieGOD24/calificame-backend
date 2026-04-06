@@ -1,6 +1,5 @@
 import io
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -172,8 +171,6 @@ class TestCompleteGradingFlow:
         assert exams_list.json()["total"] == 2
 
         # ====== Step 8: Grade all exams (mocked AI) ======
-        question_ids = [q["id"] for q in questions]
-
         with patch("app.api.grading.GradingService") as mock_grade_cls:
             mock_grade_svc = MagicMock()
             mock_grade_cls.return_value = mock_grade_svc
@@ -217,7 +214,7 @@ class TestCompleteGradingFlow:
                     exam.max_score = 30.0
                     exam.grade_percentage = (total / 30.0) * 100
                     exam.status = "graded"
-                    exam.graded_at = datetime.now(timezone.utc)
+                    exam.graded_at = datetime.now(UTC)
 
                 proj.status = ProjectStatus.COMPLETED.value
                 db.commit()

@@ -1,15 +1,13 @@
 import io
-import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.models.exam_answer import ExamAnswer
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project
 from app.models.question import Question
 from app.models.student_exam import StudentExam
-from app.models.user import User
 from app.services.storage import LocalStorageService
 
 
@@ -45,13 +43,13 @@ class TestGradeSingleExam:
             mock_svc_cls.return_value = mock_svc
 
             def fake_grade(db, exam, qs):
-                from datetime import datetime, timezone
+                from datetime import UTC, datetime
 
                 exam.total_score = 8.0
                 exam.max_score = 10.0
                 exam.grade_percentage = 80.0
                 exam.status = "graded"
-                exam.graded_at = datetime.now(timezone.utc)
+                exam.graded_at = datetime.now(UTC)
 
                 # Create answers
                 for q in qs:
@@ -122,7 +120,7 @@ class TestGradeAllExams:
             mock_svc_cls.return_value = mock_svc
 
             def fake_grade_all(db, proj, regrade=False):
-                from datetime import datetime, timezone
+                from datetime import UTC, datetime
 
                 exams = db.query(StudentExam).filter(StudentExam.project_id == proj.id).all()
                 for exam in exams:
@@ -130,7 +128,7 @@ class TestGradeAllExams:
                     exam.max_score = 10.0
                     exam.grade_percentage = 100.0
                     exam.status = "graded"
-                    exam.graded_at = datetime.now(timezone.utc)
+                    exam.graded_at = datetime.now(UTC)
 
                 db.commit()
                 for e in exams:

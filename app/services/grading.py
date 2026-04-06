@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -85,7 +85,7 @@ class GradingService:
             student_exam.max_score = max_score
             student_exam.grade_percentage = (total_score / max_score * 100) if max_score > 0 else 0.0
             student_exam.status = "graded"
-            student_exam.graded_at = datetime.now(timezone.utc)
+            student_exam.graded_at = datetime.now(UTC)
             student_exam.grading_details = {"results": grading_results}
 
             db.commit()

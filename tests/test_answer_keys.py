@@ -1,12 +1,9 @@
 import io
-import json
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.models.answer_key import AnswerKey
 from app.models.project import Project
-from app.models.user import User
 from app.services.storage import LocalStorageService
 
 
@@ -160,6 +157,7 @@ class TestProcessAnswerKey:
 
             # Simulate what process_answer_key does
             from uuid import uuid4
+
             from app.models.question import Question
 
             def fake_process(db, answer_key, project):

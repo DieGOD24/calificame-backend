@@ -3,7 +3,6 @@ import io
 from fastapi.testclient import TestClient
 
 from app.models.project import Project
-from app.models.user import User
 from app.services.storage import LocalStorageService
 
 
