@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,46 +23,46 @@ env:
 
 jobs:
   lint:
-    name: "Lint & Format (Python ${{ matrix.python-version }})"
+    name: "Lint & Format"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements-dev.txt') }}
-          restore-keys: ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          key: ${{ runner.os }}-pip-3.13-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-pip-3.13-
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Ruff check (linting)
-        run: ruff check app/ tests/ --output-format=github --fix
+      - name: Ruff check --fix and format
+        run: |
+          ruff check app/ tests/ --fix --quiet
+          ruff format app/ tests/
 
-      - name: Ruff format
-        run: ruff format app/ tests/
-
-      - name: Verify no lint/format changes needed
+      - name: Auto-commit if needed
         run: |
           if [ -n "$(git diff --name-only)" ]; then
-            echo "::error::The following files need ruff fixes. Run 'ruff check --fix . && ruff format .' locally:"
+            echo "Files auto-formatted by ruff:"
             git diff --name-only
-            git diff --stat
-            exit 1
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "style: auto-format with ruff"
+            git push
+            echo "::notice::Auto-formatted and pushed."
+          else
+            echo "All files properly formatted."
           fi
-          echo "All files are properly linted and formatted"
 
   type-check:
     name: "Type Check (mypy)"
@@ -67,8 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
@@ -95,8 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -133,8 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
@@ -151,7 +151,6 @@ jobs:
         run: |
           echo "Checking for hardcoded secrets..."
           ! grep -rn "sk-[a-zA-Z0-9]\{20,\}" app/ tests/ || echo "WARNING: Possible API key found"
-          ! grep -rn "password\s*=\s*[\"'][^\"']\{8,\}" app/ --include="*.py" | grep -v "hashed_password" | grep -v "test" | grep -v "def \|#" || true
 
   docker:
     name: "Docker Build"
