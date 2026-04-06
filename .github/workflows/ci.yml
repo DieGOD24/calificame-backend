@@ -165,11 +165,11 @@ jobs:
       - name: Verify container starts
         run: |
           docker run -d --name test-backend \
-            -e DATABASE_URL=sqlite:///./test.db \
+            -e DATABASE_URL=sqlite:///app/data/test.db \
             -e SECRET_KEY=docker-test-key \
             -e OPENAI_API_KEY=sk-test \
             -p 8000:8000 \
             calificame-backend:test
-          sleep 5
+          sleep 8
           curl -f http://localhost:8000/health || (docker logs test-backend && exit 1)
           docker stop test-backend

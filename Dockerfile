@@ -21,8 +21,8 @@ COPY . .
 
 RUN addgroup --system --gid 1001 appgroup \
     && adduser --system --uid 1001 --ingroup appgroup appuser \
-    && mkdir -p /app/logs /app/uploads \
-    && chown -R appuser:appgroup /app/logs /app/uploads
+    && mkdir -p /app/logs /app/uploads /app/data \
+    && chown -R appuser:appgroup /app/logs /app/uploads /app/data
 
 USER appuser
 
