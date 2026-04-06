@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
@@ -29,51 +30,57 @@ def _get_user_project(project_id: str, db: Session, current_user: User) -> Proje
     return project
 
 
-@router.post("/upload", response_model=StudentExamResponse, status_code=status.HTTP_201_CREATED)
-async def upload_student_exam(
+@router.post("/upload", response_model=list[StudentExamResponse], status_code=status.HTTP_201_CREATED)
+async def upload_student_exams(
     project_id: str,
-    file: UploadFile,
+    files: list[UploadFile],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> StudentExam:
-    """Upload a student exam file."""
+) -> list[StudentExam]:
+    """Upload one or more student exam files."""
     _get_user_project(project_id, db, current_user)
 
-    content_type = file.content_type or ""
-    if not (content_type.startswith("image/") or content_type == "application/pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a PDF or image",
-        )
-
-    file_bytes = await file.read()
-
-    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-    if len(file_bytes) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File size exceeds {settings.MAX_FILE_SIZE_MB}MB limit",
-        )
-
-    file_type = "pdf" if content_type == "application/pdf" else "images"
-    extension = ".pdf" if file_type == "pdf" else ".png"
-    storage_path = f"student_exams/{project_id}/{uuid4()}{extension}"
-
     storage = get_storage_service()
-    storage.save_file(file_bytes, storage_path)
+    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    created: list[StudentExam] = []
 
-    student_exam = StudentExam(
-        project_id=project_id,
-        original_filename=file.filename,
-        file_path=storage_path,
-        file_type=file_type,
-        status="uploaded",
-    )
-    db.add(student_exam)
+    for file in files:
+        content_type = file.content_type or ""
+        if not (content_type.startswith("image/") or content_type == "application/pdf"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El archivo '{file.filename}' debe ser PDF o imagen",
+            )
+
+        file_bytes = await file.read()
+
+        if len(file_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"'{file.filename}' excede el limite de {settings.MAX_FILE_SIZE_MB}MB",
+            )
+
+        file_type = "pdf" if content_type == "application/pdf" else "images"
+        extension = ".pdf" if file_type == "pdf" else ".png"
+        storage_path = f"student_exams/{project_id}/{uuid4()}{extension}"
+
+        storage.save_file(file_bytes, storage_path)
+
+        student_exam = StudentExam(
+            project_id=project_id,
+            original_filename=file.filename,
+            file_path=storage_path,
+            file_type=file_type,
+            status="uploaded",
+        )
+        db.add(student_exam)
+        created.append(student_exam)
+
     db.commit()
-    db.refresh(student_exam)
+    for exam in created:
+        db.refresh(exam)
 
-    return student_exam
+    return created
 
 
 @router.get("/", response_model=StudentExamListResponse)
@@ -147,6 +154,39 @@ def get_student_exam(
         "student_exam": StudentExamResponse.model_validate(exam),
         "answers": answers,
     }
+
+
+class StudentExamUpdate(BaseModel):
+    student_name: str | None = None
+    student_identifier: str | None = None
+
+
+@router.patch("/{exam_id}", response_model=StudentExamResponse)
+def update_student_exam(
+    project_id: str,
+    exam_id: str,
+    data: StudentExamUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> StudentExam:
+    """Update student name or identifier for an exam."""
+    _get_user_project(project_id, db, current_user)
+
+    exam = (
+        db.query(StudentExam)
+        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
+        .first()
+    )
+    if exam is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(exam, field, value)
+
+    db.commit()
+    db.refresh(exam)
+    return exam
 
 
 @router.delete("/{exam_id}", status_code=status.HTTP_204_NO_CONTENT)

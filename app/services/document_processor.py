@@ -1,43 +1,56 @@
+import io
 from uuid import uuid4
 
+import fitz  # pymupdf
 from sqlalchemy.orm import Session
 
+from app.agents.answer_extraction_agent import AnswerExtractionAgent
 from app.models.answer_key import AnswerKey
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
-from app.services.ocr import OCRService
 from app.services.storage import get_storage_service
+
+
+def _pdf_to_images(pdf_bytes: bytes) -> list[bytes]:
+    """Convert each PDF page to a PNG image."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    images: list[bytes] = []
+    for page in doc:
+        pix = page.get_pixmap(dpi=200)
+        images.append(pix.tobytes("png"))
+    doc.close()
+    return images
 
 
 class DocumentProcessor:
     """Processes uploaded documents (answer keys and student exams)."""
 
-    def __init__(self, ocr_service: OCRService | None = None) -> None:
-        self.ocr_service = ocr_service or OCRService()
+    def __init__(self, extraction_agent: AnswerExtractionAgent | None = None) -> None:
         self.storage = get_storage_service()
+        self.extraction_agent = extraction_agent or AnswerExtractionAgent()
 
-    def process_answer_key(self, db: Session, answer_key: AnswerKey, project: Project) -> list[Question]:
-        """Process an answer key file to extract questions and answers."""
+    def process_answer_key(
+        self, db: Session, answer_key: AnswerKey, project: Project
+    ) -> list[Question]:
+        """Process an answer key file to extract questions and answers via Vision AI."""
         file_bytes = self.storage.get_file(answer_key.file_path)
 
-        # Extract text based on file type
+        # Convert to images regardless of file type
         if answer_key.file_type == "pdf":
-            pages_text = self.ocr_service.process_pdf(file_bytes)
-            combined_text = "\n\n".join(pages_text)
-            answer_key.num_pages = len(pages_text)
+            images = _pdf_to_images(file_bytes)
         else:
-            # For images, process via vision OCR
-            combined_text = self.ocr_service.process_image(file_bytes)
-            answer_key.num_pages = 1
+            images = [file_bytes]
 
-        # Extract structured Q&A
+        answer_key.num_pages = len(images)
+
+        # Use the extraction agent with images → GPT-4o Vision
         config = project.config or {}
-        qa_pairs = self.ocr_service.extract_questions_and_answers(combined_text, config)
+        qa_pairs = self.extraction_agent.execute(images=images, config=config)
 
         # Store raw processed data
         answer_key.processed_data = {
-            "raw_text": combined_text,
+            "num_images": len(images),
             "extracted_questions": qa_pairs,
         }
         answer_key.is_processed = True
@@ -74,19 +87,18 @@ class DocumentProcessor:
         student_exam: StudentExam,
         project: Project,
     ) -> dict:
-        """Process a student exam file to extract answers."""
+        """Process a student exam file to extract answers as images."""
         file_bytes = self.storage.get_file(student_exam.file_path)
 
         if student_exam.file_type == "pdf":
-            pages_text = self.ocr_service.process_pdf(file_bytes)
-            combined_text = "\n\n".join(pages_text)
+            images = _pdf_to_images(file_bytes)
         else:
-            combined_text = self.ocr_service.process_image(file_bytes)
+            images = [file_bytes]
 
         student_exam.status = "processing"
         db.commit()
 
         return {
-            "raw_text": combined_text,
+            "images": images,
             "student_exam_id": student_exam.id,
         }

@@ -7,18 +7,15 @@ from app.models.exam_answer import ExamAnswer
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
-from app.services.document_processor import DocumentProcessor
-from app.services.ocr import OCRService
+from app.services.document_processor import _pdf_to_images
 from app.services.storage import get_storage_service
 
 
 class GradingService:
     """Service for grading student exams against answer keys."""
 
-    def __init__(self, ocr_service: OCRService | None = None) -> None:
-        self.ocr_service = ocr_service or OCRService()
+    def __init__(self) -> None:
         self.storage = get_storage_service()
-        self.doc_processor = DocumentProcessor(self.ocr_service)
 
     def grade_exam(
         self,
@@ -36,12 +33,18 @@ class GradingService:
             # Read the student exam file
             file_bytes = self.storage.get_file(student_exam.file_path)
 
+            # Convert to images (PDF pages or raw image)
+            if student_exam.file_type == "pdf":
+                images = _pdf_to_images(file_bytes)
+            else:
+                images = [file_bytes]
+
             # Use grading agent
             project = student_exam.project
             config = project.config or {} if project else {}
-            agent = GradingAgent(openai_client=self.ocr_service.client)
+            agent = GradingAgent()
             grading_results = agent.execute(
-                student_images=[file_bytes],
+                student_images=images,
                 questions=questions,
                 config=config,
             )
@@ -96,8 +99,10 @@ class GradingService:
 
         return student_exam
 
-    def grade_all_exams(self, db: Session, project: Project) -> list[StudentExam]:
-        """Grade all uploaded student exams for a project."""
+    def grade_all_exams(
+        self, db: Session, project: Project, regrade: bool = False
+    ) -> list[StudentExam]:
+        """Grade student exams. If regrade=True, re-grade already graded ones too."""
         questions = (
             db.query(Question)
             .filter(Question.project_id == project.id, Question.is_confirmed.is_(True))
@@ -105,11 +110,16 @@ class GradingService:
             .all()
         )
 
+        if regrade:
+            statuses = ["uploaded", "error", "graded"]
+        else:
+            statuses = ["uploaded", "error"]
+
         student_exams = (
             db.query(StudentExam)
             .filter(
                 StudentExam.project_id == project.id,
-                StudentExam.status.in_(["uploaded", "error"]),
+                StudentExam.status.in_(statuses),
             )
             .all()
         )

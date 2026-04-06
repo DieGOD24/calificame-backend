@@ -23,9 +23,9 @@ def _create_student_exam(
     response = client.post(
         f"/api/v1/projects/{project_id}/exams/upload",
         headers=auth_headers,
-        files={"file": ("student.pdf", io.BytesIO(b"%PDF-1.4 content"), "application/pdf")},
+        files={"files": ("student.pdf", io.BytesIO(b"%PDF-1.4 content"), "application/pdf")},
     )
-    return response.json()["id"]
+    return response.json()[0]["id"]
 
 
 class TestGradeSingleExam:
@@ -121,7 +121,7 @@ class TestGradeAllExams:
             mock_svc = MagicMock()
             mock_svc_cls.return_value = mock_svc
 
-            def fake_grade_all(db, proj):
+            def fake_grade_all(db, proj, regrade=False):
                 from datetime import datetime, timezone
 
                 exams = db.query(StudentExam).filter(StudentExam.project_id == proj.id).all()

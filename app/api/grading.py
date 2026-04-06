@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
@@ -88,13 +88,13 @@ def grade_single_exam(
 @router.post("/grade-all", response_model=list[StudentExamResponse])
 def grade_all_exams(
     project_id: str,
+    regrade: bool = Query(False, description="Re-grade already graded exams too"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list:
-    """Grade all uploaded student exams for a project."""
+    """Grade all student exams. Use ?regrade=true to re-grade already graded ones."""
     project = _get_user_project(project_id, db, current_user)
 
-    # Verify questions are confirmed
     confirmed_count = (
         db.query(Question)
         .filter(Question.project_id == project_id, Question.is_confirmed.is_(True))
@@ -107,7 +107,7 @@ def grade_all_exams(
         )
 
     grading_service = GradingService()
-    results = grading_service.grade_all_exams(db, project)
+    results = grading_service.grade_all_exams(db, project, regrade=regrade)
 
     return results
 
