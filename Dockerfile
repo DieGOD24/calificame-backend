@@ -20,7 +20,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 
 RUN addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --ingroup appgroup appuser
+    && adduser --system --uid 1001 --ingroup appgroup appuser \
+    && mkdir -p /app/logs /app/uploads \
+    && chown -R appuser:appgroup /app/logs /app/uploads
 
 USER appuser
 
