@@ -35,7 +35,7 @@ def grade_single_exam(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Grade a single student exam."""
-    project = _get_user_project(project_id, db, current_user)
+    _get_user_project(project_id, db, current_user)
 
     # Verify questions are confirmed
     confirmed_questions = (

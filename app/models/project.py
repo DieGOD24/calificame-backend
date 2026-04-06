@@ -1,13 +1,13 @@
 import enum
 from uuid import uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Text, func
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
 
-class ProjectStatus(str, enum.Enum):
+class ProjectStatus(enum.StrEnum):
     DRAFT = "draft"
     CONFIGURING = "configuring"
     ANSWER_KEY_UPLOADED = "answer_key_uploaded"

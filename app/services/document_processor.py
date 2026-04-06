@@ -1,4 +1,3 @@
-import io
 from uuid import uuid4
 
 import fitz  # pymupdf
