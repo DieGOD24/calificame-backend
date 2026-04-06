@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from app.models.exam_answer import ExamAnswer
 from app.models.project import Project
 from app.models.question import Question
-from app.models.student_exam import StudentExam
 from app.services.storage import LocalStorageService
 
 
