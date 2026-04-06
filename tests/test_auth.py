@@ -84,9 +84,7 @@ class TestLogin:
 
 
 class TestGetMe:
-    def test_get_me_authenticated(
-        self, client: TestClient, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_get_me_authenticated(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
         response = client.get("/api/v1/auth/me", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()

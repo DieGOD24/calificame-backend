@@ -47,11 +47,7 @@ def update_question(
     """Update or correct a question."""
     _get_user_project(project_id, db, current_user)
 
-    question = (
-        db.query(Question)
-        .filter(Question.id == question_id, Question.project_id == project_id)
-        .first()
-    )
+    question = db.query(Question).filter(Question.id == question_id, Question.project_id == project_id).first()
     if question is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
@@ -79,11 +75,7 @@ def confirm_questions(
 
     confirmed_questions: list[Question] = []
     for qid in request.question_ids:
-        question = (
-            db.query(Question)
-            .filter(Question.id == qid, Question.project_id == project_id)
-            .first()
-        )
+        question = db.query(Question).filter(Question.id == qid, Question.project_id == project_id).first()
         if question is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -41,12 +41,7 @@ def list_projects(
     """List all projects for the current user."""
     query = db.query(Project).filter(Project.owner_id == current_user.id)
     total = query.count()
-    projects = (
-        query.order_by(Project.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    projects = query.order_by(Project.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     return {
         "items": [_project_to_response(p) for p in projects],

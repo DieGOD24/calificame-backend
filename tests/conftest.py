@@ -175,6 +175,7 @@ def temp_storage(tmp_path: Any) -> Generator[LocalStorageService, None, None]:
     set_storage_service(storage)
     yield storage
     from app.services.storage import reset_storage_service
+
     reset_storage_service()
 
 

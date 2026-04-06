@@ -29,9 +29,7 @@ class DocumentProcessor:
         self.storage = get_storage_service()
         self.extraction_agent = extraction_agent or AnswerExtractionAgent()
 
-    def process_answer_key(
-        self, db: Session, answer_key: AnswerKey, project: Project
-    ) -> list[Question]:
+    def process_answer_key(self, db: Session, answer_key: AnswerKey, project: Project) -> list[Question]:
         """Process an answer key file to extract questions and answers via Vision AI."""
         file_bytes = self.storage.get_file(answer_key.file_path)
 

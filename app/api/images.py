@@ -126,11 +126,7 @@ def get_exam_image(
     """Get student exam as a PNG image (specific page for PDFs)."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
 
@@ -151,11 +147,7 @@ def get_exam_page_count(
     """Get number of pages in the student exam."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
 

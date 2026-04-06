@@ -93,10 +93,7 @@ def list_student_exams(
     _get_user_project(project_id, db, current_user)
 
     exams = (
-        db.query(StudentExam)
-        .filter(StudentExam.project_id == project_id)
-        .order_by(StudentExam.created_at.desc())
-        .all()
+        db.query(StudentExam).filter(StudentExam.project_id == project_id).order_by(StudentExam.created_at.desc()).all()
     )
 
     graded = [e for e in exams if e.status == "graded"]
@@ -125,11 +122,7 @@ def get_student_exam(
     """Get student exam details with answers."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
 
@@ -172,11 +165,7 @@ def update_student_exam(
     """Update student name or identifier for an exam."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
 
@@ -199,11 +188,7 @@ def delete_student_exam(
     """Delete a student exam."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
 

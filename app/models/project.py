@@ -31,10 +31,11 @@ class Project(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     owner = relationship("User", back_populates="projects")
-    answer_key = relationship(
-        "AnswerKey", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
+    answer_key = relationship("AnswerKey", back_populates="project", uselist=False, cascade="all, delete-orphan")
     questions = relationship(
-        "Question", back_populates="project", cascade="all, delete-orphan", order_by="Question.question_number"
+        "Question",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="Question.question_number",
     )
     student_exams = relationship("StudentExam", back_populates="project", cascade="all, delete-orphan")

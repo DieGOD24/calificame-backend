@@ -50,11 +50,7 @@ def grade_single_exam(
             detail="No confirmed questions. Please confirm the answer key first.",
         )
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student exam not found")
 
@@ -96,9 +92,7 @@ def grade_all_exams(
     project = _get_user_project(project_id, db, current_user)
 
     confirmed_count = (
-        db.query(Question)
-        .filter(Question.project_id == project_id, Question.is_confirmed.is_(True))
-        .count()
+        db.query(Question).filter(Question.project_id == project_id, Question.is_confirmed.is_(True)).count()
     )
     if confirmed_count == 0:
         raise HTTPException(
@@ -165,19 +159,9 @@ def export_results(
     """Export all grading results as JSON."""
     project = _get_user_project(project_id, db, current_user)
 
-    questions = (
-        db.query(Question)
-        .filter(Question.project_id == project_id)
-        .order_by(Question.question_number)
-        .all()
-    )
+    questions = db.query(Question).filter(Question.project_id == project_id).order_by(Question.question_number).all()
 
-    exams = (
-        db.query(StudentExam)
-        .filter(StudentExam.project_id == project_id)
-        .order_by(StudentExam.created_at)
-        .all()
-    )
+    exams = db.query(StudentExam).filter(StudentExam.project_id == project_id).order_by(StudentExam.created_at).all()
 
     export_data = {
         "project": {

@@ -99,9 +99,7 @@ class GradingService:
 
         return student_exam
 
-    def grade_all_exams(
-        self, db: Session, project: Project, regrade: bool = False
-    ) -> list[StudentExam]:
+    def grade_all_exams(self, db: Session, project: Project, regrade: bool = False) -> list[StudentExam]:
         """Grade student exams. If regrade=True, re-grade already graded ones too."""
         questions = (
             db.query(Question)

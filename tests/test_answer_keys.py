@@ -162,7 +162,10 @@ class TestProcessAnswerKey:
 
             def fake_process(db, answer_key, project):
                 answer_key.is_processed = True
-                answer_key.processed_data = {"raw_text": "test", "extracted_questions": mock_questions_data}
+                answer_key.processed_data = {
+                    "raw_text": "test",
+                    "extracted_questions": mock_questions_data,
+                }
                 answer_key.num_pages = 1
 
                 questions = []

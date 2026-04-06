@@ -82,7 +82,11 @@ class TestCompleteGradingFlow:
         # ====== Step 5: Process answer key (mocked OCR) ======
         mock_questions = [
             {"question_number": 1, "question_text": "Solve: 2x + 3 = 7", "correct_answer": "x = 2"},
-            {"question_number": 2, "question_text": "Factor: x^2 - 4", "correct_answer": "(x+2)(x-2)"},
+            {
+                "question_number": 2,
+                "question_text": "Factor: x^2 - 4",
+                "correct_answer": "(x+2)(x-2)",
+            },
             {"question_number": 3, "question_text": "What is sqrt(144)?", "correct_answer": "12"},
         ]
 
@@ -93,7 +97,10 @@ class TestCompleteGradingFlow:
             def fake_process_ak(db, answer_key, proj):
                 answer_key.is_processed = True
                 answer_key.num_pages = 1
-                answer_key.processed_data = {"raw_text": "...", "extracted_questions": mock_questions}
+                answer_key.processed_data = {
+                    "raw_text": "...",
+                    "extracted_questions": mock_questions,
+                }
 
                 db.query(Question).filter(Question.project_id == proj.id).delete()
 
@@ -176,11 +183,7 @@ class TestCompleteGradingFlow:
             mock_grade_cls.return_value = mock_grade_svc
 
             def fake_grade_all(db, proj, regrade=False):
-                exams = (
-                    db.query(StudentExam)
-                    .filter(StudentExam.project_id == proj.id)
-                    .all()
-                )
+                exams = db.query(StudentExam).filter(StudentExam.project_id == proj.id).all()
                 qs = (
                     db.query(Question)
                     .filter(Question.project_id == proj.id, Question.is_confirmed.is_(True))
