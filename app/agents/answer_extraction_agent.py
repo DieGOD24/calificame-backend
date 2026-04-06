@@ -89,8 +89,7 @@ class AnswerExtractionAgent(BaseAgent):
             "mixed": "mixto (opcion multiple y desarrollo)",
         }
         user_text = (
-            f"Analiza este solucionario de examen/taller.\n"
-            f"Tipo de examen: {type_labels.get(exam_type, exam_type)}.\n"
+            f"Analiza este solucionario de examen/taller.\nTipo de examen: {type_labels.get(exam_type, exam_type)}.\n"
         )
         if total_questions:
             user_text += f"Se esperan {total_questions} preguntas/ejercicios.\n"

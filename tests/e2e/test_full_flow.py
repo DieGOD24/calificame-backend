@@ -203,7 +203,7 @@ class TestCompleteGradingFlow:
                             id=str(uuid4()),
                             student_exam_id=exam.id,
                             question_id=q.id,
-                            extracted_answer=f"student answer {i+1}",
+                            extracted_answer=f"student answer {i + 1}",
                             is_correct=s == q.points,
                             score=s,
                             max_score=q.points,
