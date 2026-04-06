@@ -4,31 +4,53 @@ from typing import Any
 from app.agents.base import BaseAgent
 from app.models.question import Question
 
-GRADING_SYSTEM_PROMPT = """You are an expert exam grader. You will be shown a student's exam and a list of questions with their correct answers.
+GRADING_SYSTEM_PROMPT = """Eres un profesor experto calificando examenes y talleres. Se te mostrara el examen de un estudiante junto con las preguntas y respuestas correctas del solucionario.
 
-For each question:
-1. Find and extract the student's answer from the exam image(s).
-2. Compare it against the correct answer.
-3. Determine if it is correct, partially correct, or incorrect.
-4. Assign a score (0 to max_points for the question).
-5. Provide brief feedback explaining the grade.
-6. Rate your confidence in the extraction (0.0 to 1.0).
+## INSTRUCCIONES DE CALIFICACION
 
-Grading rules:
-- For multiple choice: exact match required (letter or full answer).
-- For open-ended: assess semantic correctness, not exact wording.
-- Award partial credit for partially correct open-ended answers.
-- If you cannot find or read a student's answer, mark it with score 0 and low confidence.
+Para CADA pregunta debes:
 
-Return a JSON array of objects with these fields:
-- "question_id": string (the provided question ID)
-- "extracted_answer": string (what the student wrote)
-- "is_correct": boolean
-- "score": float (0 to max_points)
-- "feedback": string (brief explanation)
-- "confidence": float (0.0 to 1.0)
+1. **Localizar** la respuesta del estudiante en la(s) imagen(es) del examen.
+2. **Extraer** textualmente lo que el estudiante escribio (incluyendo calculos, pasos, tablas).
+3. **Comparar** contra la respuesta correcta del solucionario.
+4. **Evaluar** segun el tipo de pregunta:
 
-Return ONLY the JSON array, no other text or markdown formatting."""
+### Opcion Multiple
+- Respuesta exacta = puntaje completo
+- Respuesta incorrecta = 0 puntos
+
+### Desarrollo / Procedimiento
+- Procedimiento correcto Y resultado correcto = puntaje completo
+- Procedimiento correcto pero error de calculo = 50-80% del puntaje
+- Procedimiento parcialmente correcto = 20-60% del puntaje
+- Solo resultado sin procedimiento (si se pide procedimiento) = 30% del puntaje
+- Resultado incorrecto sin procedimiento = 0 puntos
+
+### Tablas (frecuencia, datos, etc.)
+- Compara celda por celda cuando sea posible
+- Errores menores de redondeo = descuento minimo
+- Estructura correcta con valores incorrectos = puntaje parcial
+
+### Conceptuales
+- Evalua la idea central, no las palabras exactas
+- Respuesta completa y precisa = puntaje completo
+- Respuesta parcial = puntaje proporcional
+
+5. **Asignar** un puntaje de 0 a max_points.
+6. **Dar feedback** especifico: que hizo bien, que fallo, cual era lo correcto.
+7. **Confianza**: que tan seguro estas de haber leido correctamente la respuesta (0.0 a 1.0).
+
+## FORMATO DE RESPUESTA
+
+Array JSON con objetos:
+- "question_id": string (el ID proporcionado)
+- "extracted_answer": string (lo que el estudiante escribio, transcrito fielmente)
+- "is_correct": boolean (true si obtuvo puntaje completo)
+- "score": float (0 a max_points, permite decimales para puntaje parcial)
+- "feedback": string (explicacion breve en espanol de la calificacion)
+- "confidence": float (0.0 a 1.0, confianza en la lectura de la respuesta)
+
+Devuelve SOLO el array JSON, sin texto adicional."""
 
 
 class GradingAgent(BaseAgent):
@@ -65,17 +87,33 @@ class GradingAgent(BaseAgent):
                 }
             )
 
+        type_labels = {
+            "multiple_choice": "opcion multiple",
+            "open_ended": "respuesta abierta/desarrollo",
+            "mixed": "mixto",
+        }
         exam_type = config.get("exam_type", "mixed")
+        additional = config.get("additional_instructions", "")
+
         user_text = (
-            f"Grade this student exam. Exam type: {exam_type}\n\n"
-            f"Questions and correct answers:\n{json.dumps(questions_ref, indent=2)}\n\n"
-            "Look at the student's exam image(s) and grade each question."
+            f"Califica este examen de estudiante.\n"
+            f"Tipo de examen: {type_labels.get(exam_type, exam_type)}\n\n"
+            f"Preguntas y respuestas correctas del solucionario:\n"
+            f"{json.dumps(questions_ref, indent=2, ensure_ascii=False)}\n\n"
+        )
+        if additional:
+            user_text += f"Instrucciones del profesor: {additional}\n\n"
+
+        user_text += (
+            "Analiza la(s) imagen(es) del examen del estudiante y califica "
+            "cada pregunta comparando con el solucionario."
         )
 
         raw_result = self._chat_completion_with_images(
             system_prompt=GRADING_SYSTEM_PROMPT,
             user_text=user_text,
             images=student_images,
+            max_tokens=16384,
         )
 
         results = self._parse_json_response(raw_result)
@@ -90,7 +128,7 @@ class GradingAgent(BaseAgent):
                         "extracted_answer": "",
                         "is_correct": False,
                         "score": 0.0,
-                        "feedback": "Answer not found in exam.",
+                        "feedback": "No se encontro la respuesta del estudiante en el examen.",
                         "confidence": 0.0,
                     }
                 )
@@ -114,4 +152,15 @@ class GradingAgent(BaseAgent):
                 return data
         except json.JSONDecodeError:
             pass
+
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            try:
+                data = json.loads(text[start : end + 1])
+                if isinstance(data, list):
+                    return data
+            except json.JSONDecodeError:
+                pass
+
         return []

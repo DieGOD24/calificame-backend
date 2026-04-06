@@ -8,11 +8,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.answer_keys import router as answer_keys_router
 from app.api.auth import router as auth_router
 from app.api.grading import router as grading_router
+from app.api.images import router as images_router
 from app.api.projects import router as projects_router
 from app.api.questions import router as questions_router
 from app.api.student_exams import router as student_exams_router
 from app.config import settings
 from app.database import Base, engine
+
+
+def _seed_demo_user() -> None:
+    """Create a demo user if none exists."""
+    from app.database import SessionLocal
+    from app.models.user import User
+    from app.services.auth import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(User).first() is None:
+            demo = User(
+                email="demo@calificame.com",
+                hashed_password=hash_password("demo1234"),
+                full_name="Profesor Demo",
+            )
+            db.add(demo)
+            db.commit()
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -23,6 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Create upload directory
     os.makedirs(settings.STORAGE_LOCAL_PATH, exist_ok=True)
+
+    # Seed demo user
+    _seed_demo_user()
 
     yield
 
@@ -50,6 +74,7 @@ app.include_router(answer_keys_router, prefix="/api/v1")
 app.include_router(questions_router, prefix="/api/v1")
 app.include_router(student_exams_router, prefix="/api/v1")
 app.include_router(grading_router, prefix="/api/v1")
+app.include_router(images_router, prefix="/api/v1")
 
 
 @app.get("/health")
