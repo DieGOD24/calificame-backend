@@ -165,7 +165,7 @@ jobs:
       - name: Verify container starts
         run: |
           docker run -d --name test-backend \
-            -e DATABASE_URL=sqlite:///app/data/test.db \
+            -e DATABASE_URL=sqlite:////app/data/test.db \
             -e SECRET_KEY=docker-test-key \
             -e OPENAI_API_KEY=sk-test \
             -p 8000:8000 \
