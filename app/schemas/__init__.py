@@ -1,5 +1,20 @@
+from app.schemas.analytics import (
+    InstitutionAnalytics,
+    ProjectAnalytics,
+    QuestionDifficulty,
+    ScoreDistribution,
+    StudentProgress,
+)
 from app.schemas.answer_key import AnswerKeyResponse, ProcessedAnswerKeyResponse
 from app.schemas.grading import GradeAllRequest, GradeExamRequest, GradingSummary
+from app.schemas.institution import (
+    InstitutionCreate,
+    InstitutionInvitationResponse,
+    InstitutionMemberResponse,
+    InstitutionResponse,
+    InstitutionUpdate,
+    InviteMemberRequest,
+)
 from app.schemas.project import (
     ProjectConfig,
     ProjectCreate,
@@ -19,7 +34,8 @@ from app.schemas.student_exam import (
     StudentExamListResponse,
     StudentExamResponse,
 )
-from app.schemas.user import Token, TokenData, UserCreate, UserLogin, UserResponse
+from app.schemas.task_log import TaskLogListResponse, TaskLogResponse
+from app.schemas.user import Token, TokenData, UserCreate, UserLogin, UserResponse, UserRoleUpdate, UserUpdate
 
 __all__ = [
     "AnswerKeyResponse",
@@ -30,19 +46,34 @@ __all__ = [
     "GradeExamRequest",
     "GradingResultResponse",
     "GradingSummary",
+    "InstitutionAnalytics",
+    "InstitutionCreate",
+    "InstitutionInvitationResponse",
+    "InstitutionMemberResponse",
+    "InstitutionResponse",
+    "InstitutionUpdate",
+    "InviteMemberRequest",
     "ProcessedAnswerKeyResponse",
+    "ProjectAnalytics",
     "ProjectConfig",
     "ProjectCreate",
     "ProjectListResponse",
     "ProjectResponse",
     "ProjectUpdate",
+    "QuestionDifficulty",
     "QuestionResponse",
     "QuestionUpdate",
+    "ScoreDistribution",
     "StudentExamListResponse",
     "StudentExamResponse",
+    "StudentProgress",
+    "TaskLogListResponse",
+    "TaskLogResponse",
     "Token",
     "TokenData",
     "UserCreate",
     "UserLogin",
     "UserResponse",
+    "UserRoleUpdate",
+    "UserUpdate",
 ]
