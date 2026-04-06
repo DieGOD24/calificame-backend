@@ -1,7 +1,6 @@
 from fastapi.testclient import TestClient
 
 from app.models.project import Project
-from app.models.user import User
 
 
 class TestCreateProject:
@@ -50,9 +49,7 @@ class TestCreateProject:
 
 
 class TestListProjects:
-    def test_list_projects(
-        self, client: TestClient, test_project: Project, auth_headers: dict
-    ) -> None:
+    def test_list_projects(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:
         response = client.get("/api/v1/projects/", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -68,21 +65,15 @@ class TestListProjects:
 
 
 class TestGetProject:
-    def test_get_project(
-        self, client: TestClient, test_project: Project, auth_headers: dict
-    ) -> None:
-        response = client.get(
-            f"/api/v1/projects/{test_project.id}", headers=auth_headers
-        )
+    def test_get_project(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:
+        response = client.get(f"/api/v1/projects/{test_project.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == test_project.id
         assert data["name"] == test_project.name
 
     def test_get_nonexistent_project(self, client: TestClient, auth_headers: dict) -> None:
-        response = client.get(
-            "/api/v1/projects/nonexistent-id", headers=auth_headers
-        )
+        response = client.get("/api/v1/projects/nonexistent-id", headers=auth_headers)
         assert response.status_code == 404
 
     def test_get_other_user_project_forbidden(
@@ -91,16 +82,12 @@ class TestGetProject:
         test_project: Project,
         auth_headers_2: dict,
     ) -> None:
-        response = client.get(
-            f"/api/v1/projects/{test_project.id}", headers=auth_headers_2
-        )
+        response = client.get(f"/api/v1/projects/{test_project.id}", headers=auth_headers_2)
         assert response.status_code == 403
 
 
 class TestUpdateProject:
-    def test_update_project(
-        self, client: TestClient, test_project: Project, auth_headers: dict
-    ) -> None:
+    def test_update_project(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:
         response = client.put(
             f"/api/v1/projects/{test_project.id}",
             headers=auth_headers,
@@ -113,16 +100,10 @@ class TestUpdateProject:
 
 
 class TestDeleteProject:
-    def test_delete_project(
-        self, client: TestClient, test_project: Project, auth_headers: dict
-    ) -> None:
-        response = client.delete(
-            f"/api/v1/projects/{test_project.id}", headers=auth_headers
-        )
+    def test_delete_project(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:
+        response = client.delete(f"/api/v1/projects/{test_project.id}", headers=auth_headers)
         assert response.status_code == 204
 
         # Verify deletion
-        response = client.get(
-            f"/api/v1/projects/{test_project.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/projects/{test_project.id}", headers=auth_headers)
         assert response.status_code == 404

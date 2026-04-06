@@ -1,5 +1,3 @@
-import io
-
 import fitz
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -56,7 +54,8 @@ def _file_to_page_image(file_bytes: bytes, file_type: str, page: int) -> bytes:
         doc.close()
         return img_bytes
     else:
-        # For images, just return the file (convert to PNG if needed)
+        import io
+
         from PIL import Image
 
         try:
@@ -127,11 +126,7 @@ def get_exam_image(
     """Get student exam as a PNG image (specific page for PDFs)."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
 
@@ -152,11 +147,7 @@ def get_exam_page_count(
     """Get number of pages in the student exam."""
     _get_user_project(project_id, db, current_user)
 
-    exam = (
-        db.query(StudentExam)
-        .filter(StudentExam.id == exam_id, StudentExam.project_id == project_id)
-        .first()
-    )
+    exam = db.query(StudentExam).filter(StudentExam.id == exam_id, StudentExam.project_id == project_id).first()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
 

@@ -3,18 +3,27 @@ import io
 from fastapi.testclient import TestClient
 
 from app.models.project import Project
-from app.models.user import User
 from app.services.storage import LocalStorageService
 
 
-def _upload_exam(client: TestClient, project_id: str, auth_headers: dict, name: str = "student1.pdf", content: bytes = b"%PDF-1.4 fake student exam", content_type: str = "application/pdf") -> dict:
+def _upload_exam(
+    client: TestClient,
+    project_id: str,
+    auth_headers: dict,
+    name: str = "student1.pdf",
+    content: bytes = b"%PDF-1.4 fake student exam",
+    content_type: str = "application/pdf",
+) -> dict:
     """Upload a single exam and return the first item from the response list."""
     response = client.post(
         f"/api/v1/projects/{project_id}/exams/upload",
         headers=auth_headers,
         files={"files": (name, io.BytesIO(content), content_type)},
     )
-    return {"response": response, "data": response.json()[0] if response.status_code == 201 else response.json()}
+    return {
+        "response": response,
+        "data": response.json()[0] if response.status_code == 201 else response.json(),
+    }
 
 
 class TestUploadStudentExam:

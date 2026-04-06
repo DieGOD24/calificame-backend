@@ -1,13 +1,13 @@
 import enum
 from uuid import uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Text, func
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
 
-class ProjectStatus(str, enum.Enum):
+class ProjectStatus(enum.StrEnum):
     DRAFT = "draft"
     CONFIGURING = "configuring"
     ANSWER_KEY_UPLOADED = "answer_key_uploaded"
@@ -31,10 +31,11 @@ class Project(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     owner = relationship("User", back_populates="projects")
-    answer_key = relationship(
-        "AnswerKey", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
+    answer_key = relationship("AnswerKey", back_populates="project", uselist=False, cascade="all, delete-orphan")
     questions = relationship(
-        "Question", back_populates="project", cascade="all, delete-orphan", order_by="Question.question_number"
+        "Question",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="Question.question_number",
     )
     student_exams = relationship("StudentExam", back_populates="project", cascade="all, delete-orphan")
