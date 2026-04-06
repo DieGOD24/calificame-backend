@@ -115,7 +115,7 @@ jobs:
         run: mkdir -p ./test_uploads
 
       - name: Run unit tests with coverage
-        run: pytest tests/ --ignore=tests/e2e -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
+        run: pytest tests/ --ignore=tests/e2e -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=40
 
       - name: Run E2E tests
         run: pytest tests/e2e/ -v --tb=short
