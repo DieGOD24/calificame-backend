@@ -162,10 +162,10 @@ class TestCompleteGradingFlow:
             upload_resp = client.post(
                 f"/api/v1/projects/{project_id}/exams/upload",
                 headers=headers,
-                files={"file": (student_name, io.BytesIO(exam_content), "application/pdf")},
+                files={"files": (student_name, io.BytesIO(exam_content), "application/pdf")},
             )
             assert upload_resp.status_code == 201
-            student_exam_ids.append(upload_resp.json()["id"])
+            student_exam_ids.append(upload_resp.json()[0]["id"])
 
         # Verify exams listed
         exams_list = client.get(f"/api/v1/projects/{project_id}/exams/", headers=headers)
@@ -178,7 +178,7 @@ class TestCompleteGradingFlow:
             mock_grade_svc = MagicMock()
             mock_grade_cls.return_value = mock_grade_svc
 
-            def fake_grade_all(db, proj):
+            def fake_grade_all(db, proj, regrade=False):
                 exams = (
                     db.query(StudentExam)
                     .filter(StudentExam.project_id == proj.id)
