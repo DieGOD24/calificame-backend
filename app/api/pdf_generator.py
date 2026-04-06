@@ -2,7 +2,7 @@ import base64
 import io
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -88,23 +88,27 @@ async def analyze_images(
             crop_box = auto_detect_crop(image_bytes)
 
             # Crop the image and encode as base64
-            cropped = img.crop((
-                crop_box["x"],
-                crop_box["y"],
-                crop_box["x"] + crop_box["width"],
-                crop_box["y"] + crop_box["height"],
-            ))
+            cropped = img.crop(
+                (
+                    crop_box["x"],
+                    crop_box["y"],
+                    crop_box["x"] + crop_box["width"],
+                    crop_box["y"] + crop_box["height"],
+                )
+            )
             buffer = io.BytesIO()
             cropped.save(buffer, format="PNG")
             cropped_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-            results.append({
-                "index": index,
-                "original_width": img.width,
-                "original_height": img.height,
-                "crop_box": crop_box,
-                "cropped_image_base64": cropped_b64,
-            })
+            results.append(
+                {
+                    "index": index,
+                    "original_width": img.width,
+                    "original_height": img.height,
+                    "crop_box": crop_box,
+                    "cropped_image_base64": cropped_b64,
+                }
+            )
         except Exception as e:
             logger.error(f"Error analyzing image {index}: {e}")
             raise HTTPException(
@@ -181,9 +185,9 @@ async def generate_pdf(
             current_step="PDF generated",
             result_data={
                 "page_count": len(image_bytes_list),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         db.add(task)
         db.commit()

@@ -30,12 +30,7 @@ def list_tasks(
         query = query.filter(TaskLog.status == task_status)
 
     total = query.count()
-    tasks = (
-        query.order_by(TaskLog.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    tasks = query.order_by(TaskLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     return {"items": tasks, "total": total}
 

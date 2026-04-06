@@ -2,10 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db, get_user_project
+from app.api.deps import get_db, get_user_project
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
-from app.models.user import User
 from app.schemas.question import (
     BulkConfirmRequest,
     ConfirmQuestionsRequest,

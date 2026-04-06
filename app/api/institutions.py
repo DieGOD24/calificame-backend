@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -103,26 +103,17 @@ def list_institutions(
     elif current_user.role == UserRole.INSTITUTION.value:
         # Institution role sees institutions they own/are member of
         member_institution_ids = (
-            db.query(InstitutionMember.institution_id)
-            .filter(InstitutionMember.user_id == current_user.id)
-            .subquery()
+            db.query(InstitutionMember.institution_id).filter(InstitutionMember.user_id == current_user.id).subquery()
         )
         query = db.query(Institution).filter(Institution.id.in_(member_institution_ids))
     else:
         # Professor/Student see institutions they are members of
         member_institution_ids = (
-            db.query(InstitutionMember.institution_id)
-            .filter(InstitutionMember.user_id == current_user.id)
-            .subquery()
+            db.query(InstitutionMember.institution_id).filter(InstitutionMember.user_id == current_user.id).subquery()
         )
         query = db.query(Institution).filter(Institution.id.in_(member_institution_ids))
 
-    institutions = (
-        query.order_by(Institution.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    institutions = query.order_by(Institution.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     return [_institution_to_response(inst) for inst in institutions]
 
@@ -195,11 +186,7 @@ def list_members(
     if institution is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found")
 
-    members = (
-        db.query(InstitutionMember)
-        .filter(InstitutionMember.institution_id == institution_id)
-        .all()
-    )
+    members = db.query(InstitutionMember).filter(InstitutionMember.institution_id == institution_id).all()
 
     result = []
     for member in members:
@@ -218,7 +205,11 @@ def list_members(
     return result
 
 
-@router.post("/{institution_id}/members/invite", response_model=InstitutionInvitationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{institution_id}/members/invite",
+    response_model=InstitutionInvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def invite_member(
     institution_id: str,
     data: InviteMemberRequest,
@@ -256,7 +247,7 @@ def invite_member(
         token=str(uuid4()),
         status="pending",
         invited_by=current_user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     db.add(invitation)
     db.commit()
@@ -291,7 +282,7 @@ def accept_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found or already used")
 
     # Check if invitation is expired
-    if invitation.expires_at and invitation.expires_at < datetime.now(timezone.utc):
+    if invitation.expires_at and invitation.expires_at < datetime.now(UTC):
         invitation.status = "expired"
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation has expired")

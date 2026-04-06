@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db, get_user_project
+from app.api.deps import get_current_active_user, get_db
 from app.models.exam_answer import ExamAnswer
 from app.models.institution import Institution, InstitutionMember
 from app.models.project import Project
@@ -71,9 +71,7 @@ def get_project_analytics(
         sorted_scores = sorted(percentages)
         mid = len(sorted_scores) // 2
         median_score = (
-            sorted_scores[mid]
-            if len(sorted_scores) % 2
-            else (sorted_scores[mid - 1] + sorted_scores[mid]) / 2
+            sorted_scores[mid] if len(sorted_scores) % 2 else (sorted_scores[mid - 1] + sorted_scores[mid]) / 2
         )
 
         # Pass rate (>= 60%)
@@ -102,20 +100,11 @@ def get_project_analytics(
         score_distribution.append(ScoreDistribution(range_label=label, count=count))
 
     # Question difficulty
-    questions = (
-        db.query(Question)
-        .filter(Question.project_id == project_id)
-        .order_by(Question.question_number)
-        .all()
-    )
+    questions = db.query(Question).filter(Question.project_id == project_id).order_by(Question.question_number).all()
 
     question_difficulty = []
     for q in questions:
-        answers = (
-            db.query(ExamAnswer)
-            .filter(ExamAnswer.question_id == q.id)
-            .all()
-        )
+        answers = db.query(ExamAnswer).filter(ExamAnswer.question_id == q.id).all()
         total_count = len(answers)
         correct_count = sum(1 for a in answers if a.is_correct)
         success_rate = (correct_count / total_count * 100) if total_count > 0 else 0.0
@@ -212,11 +201,7 @@ def get_institution_analytics(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     # Count members by role
-    members = (
-        db.query(InstitutionMember)
-        .filter(InstitutionMember.institution_id == institution_id)
-        .all()
-    )
+    members = db.query(InstitutionMember).filter(InstitutionMember.institution_id == institution_id).all()
     total_professors = sum(1 for m in members if m.role in ("professor", "owner", "admin"))
     total_students = sum(1 for m in members if m.role == "student")
 
@@ -224,11 +209,7 @@ def get_institution_analytics(
     member_user_ids = [m.user_id for m in members]
 
     # Count projects owned by members
-    total_projects = (
-        db.query(Project)
-        .filter(Project.owner_id.in_(member_user_ids))
-        .count()
-    ) if member_user_ids else 0
+    total_projects = (db.query(Project).filter(Project.owner_id.in_(member_user_ids)).count()) if member_user_ids else 0
 
     # Count graded exams across member projects
     graded_exams_query = (
@@ -244,9 +225,7 @@ def get_institution_analytics(
 
     # Average score percentage
     percentages = [e.grade_percentage for e in graded_exams if e.grade_percentage is not None]
-    average_score_percentage = (
-        round(sum(percentages) / len(percentages), 2) if percentages else None
-    )
+    average_score_percentage = round(sum(percentages) / len(percentages), 2) if percentages else None
 
     logger.info(f"Generated analytics for institution {institution_id}")
 

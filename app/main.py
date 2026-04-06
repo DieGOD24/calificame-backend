@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from app.api.analytics import router as analytics_router
 from app.api.answer_keys import router as answer_keys_router
 from app.api.auth import router as auth_router
 from app.api.grading import router as grading_router
@@ -16,7 +17,6 @@ from app.api.projects import router as projects_router
 from app.api.questions import router as questions_router
 from app.api.student_exams import router as student_exams_router
 from app.api.tasks import router as tasks_router
-from app.api.analytics import router as analytics_router
 from app.config import settings
 from app.database import Base, engine
 from app.logging_config import setup_logging
