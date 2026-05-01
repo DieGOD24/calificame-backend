@@ -1,4 +1,5 @@
 from app.models.answer_key import AnswerKey
+from app.models.clase import Class, ClassEnrollment, ClassProject
 from app.models.exam_answer import ExamAnswer
 from app.models.institution import Institution, InstitutionInvitation, InstitutionMember
 from app.models.project import Project, ProjectStatus
@@ -9,6 +10,9 @@ from app.models.user import User, UserRole
 
 __all__ = [
     "AnswerKey",
+    "Class",
+    "ClassEnrollment",
+    "ClassProject",
     "ExamAnswer",
     "Institution",
     "InstitutionInvitation",

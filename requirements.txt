@@ -21,3 +21,4 @@ opencv-python-headless>=4.9
 fpdf2>=2.7
 openpyxl>=3.1
 slowapi>=0.1.9
+tenacity>=8.0

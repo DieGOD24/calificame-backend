@@ -39,3 +39,4 @@ class Project(Base):
         order_by="Question.question_number",
     )
     student_exams = relationship("StudentExam", back_populates="project", cascade="all, delete-orphan")
+    class_project = relationship("ClassProject", back_populates="project", uselist=False)

@@ -1,7 +1,8 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from loguru import logger
+from openai import AuthenticationError as OpenAIAuthError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, get_user_project
@@ -9,6 +10,7 @@ from app.config import settings
 from app.models.answer_key import AnswerKey
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
+from app.rate_limit import limiter
 from app.schemas.answer_key import AnswerKeyResponse, ProcessedAnswerKeyResponse
 from app.schemas.question import QuestionResponse
 from app.services.document_processor import DocumentProcessor
@@ -18,7 +20,9 @@ router = APIRouter(prefix="/projects/{project_id}/answer-key", tags=["Answer Key
 
 
 @router.post("/upload", response_model=AnswerKeyResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_UPLOAD)
 async def upload_answer_key(
+    request: Request,
     project_id: str,
     file: UploadFile,
     db: Session = Depends(get_db),
@@ -89,7 +93,9 @@ def get_answer_key(
 
 
 @router.post("/process", response_model=ProcessedAnswerKeyResponse)
+@limiter.limit(settings.RATE_LIMIT_AI)
 def process_answer_key(
+    request: Request,
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -102,7 +108,19 @@ def process_answer_key(
 
     logger.info("Processing answer key for project {} by {}", project_id, current_user.email)
     processor = DocumentProcessor()
-    questions = processor.process_answer_key(db, answer_key, project)
+    try:
+        questions = processor.process_answer_key(db, answer_key, project)
+    except OpenAIAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service unavailable: OpenAI API key is not configured. Contact the administrator.",
+        )
+    except Exception as exc:
+        logger.error("Answer key processing failed for project {}: {}", project_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process answer key. Please try again later.",
+        )
     logger.info("Extracted {} questions from answer key", len(questions))
 
     return {

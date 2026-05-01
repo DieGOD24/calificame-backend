@@ -1,18 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from loguru import logger
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, require_role
 from app.models.user import User, UserRole
+from app.rate_limit import limiter
 from app.schemas.user import Token, UserCreate, UserLogin, UserResponse, UserRoleUpdate
 from app.services.auth import authenticate_user, create_access_token, hash_password, verify_password
+from app.services.validators import validate_password
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_data: UserCreate, db: Session = Depends(get_db)) -> User:
+@limiter.limit("5/minute")
+def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)) -> User:
     """Register a new user."""
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
@@ -20,6 +23,10 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> User:
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
+
+    valid, msg = validate_password(user_data.password)
+    if not valid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
     user = User(
         email=user_data.email,
@@ -35,7 +42,8 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> User:
 
 
 @router.post("/login", response_model=Token)
-def login(login_data: UserLogin, db: Session = Depends(get_db)) -> dict:
+@limiter.limit("5/minute")
+def login(request: Request, login_data: UserLogin, db: Session = Depends(get_db)) -> dict:
     """Login and return a JWT token."""
     user = authenticate_user(db, login_data.email, login_data.password)
     if user is None:
@@ -104,10 +112,11 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Contrasena actual incorrecta",
         )
-    if len(data.new_password) < 6:
+    valid, msg = validate_password(data.new_password)
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La nueva contrasena debe tener al menos 6 caracteres",
+            detail=msg,
         )
 
     current_user.hashed_password = hash_password(data.new_password)
@@ -119,11 +128,20 @@ def change_password(
 # Admin endpoints
 @router.get("/users", response_model=list[UserResponse])
 def list_users(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.DEVELOPER, UserRole.ADMIN)),
 ) -> list[User]:
-    """List all users (Developer/Admin only)."""
-    return db.query(User).order_by(User.created_at.desc()).all()
+    """List users with pagination (Developer/Admin only)."""
+    offset = (page - 1) * per_page
+    return (
+        db.query(User)
+        .order_by(User.created_at.desc())
+        .offset(offset)
+        .limit(per_page)
+        .all()
+    )
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
