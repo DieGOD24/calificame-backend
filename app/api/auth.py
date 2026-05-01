@@ -168,12 +168,7 @@ def list_users(
         query = query.filter(or_(User.email.ilike(like), User.full_name.ilike(like)))
 
     total = query.count()
-    items = (
-        query.order_by(User.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
+    items = query.order_by(User.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 
