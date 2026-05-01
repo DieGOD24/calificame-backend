@@ -63,40 +63,46 @@ def _setup_graded_class(
 
     # Graded exams
     # Alice: graded on both projects
-    db.add(StudentExam(
-        id=str(uuid4()),
-        project_id=p1.id,
-        student_name="Alice",
-        student_identifier="STU-A",
-        file_path="/fake/alice_e1.pdf",
-        status="graded",
-        total_score=8.0,
-        max_score=10.0,
-        grade_percentage=80.0,
-    ))
-    db.add(StudentExam(
-        id=str(uuid4()),
-        project_id=p2.id,
-        student_name="Alice",
-        student_identifier="STU-A",
-        file_path="/fake/alice_e2.pdf",
-        status="graded",
-        total_score=9.0,
-        max_score=10.0,
-        grade_percentage=90.0,
-    ))
+    db.add(
+        StudentExam(
+            id=str(uuid4()),
+            project_id=p1.id,
+            student_name="Alice",
+            student_identifier="STU-A",
+            file_path="/fake/alice_e1.pdf",
+            status="graded",
+            total_score=8.0,
+            max_score=10.0,
+            grade_percentage=80.0,
+        )
+    )
+    db.add(
+        StudentExam(
+            id=str(uuid4()),
+            project_id=p2.id,
+            student_name="Alice",
+            student_identifier="STU-A",
+            file_path="/fake/alice_e2.pdf",
+            status="graded",
+            total_score=9.0,
+            max_score=10.0,
+            grade_percentage=90.0,
+        )
+    )
     # Bob: graded on project 1 only
-    db.add(StudentExam(
-        id=str(uuid4()),
-        project_id=p1.id,
-        student_name="Bob",
-        student_identifier="STU-B",
-        file_path="/fake/bob_e1.pdf",
-        status="graded",
-        total_score=5.0,
-        max_score=10.0,
-        grade_percentage=50.0,
-    ))
+    db.add(
+        StudentExam(
+            id=str(uuid4()),
+            project_id=p1.id,
+            student_name="Bob",
+            student_identifier="STU-B",
+            file_path="/fake/bob_e1.pdf",
+            status="graded",
+            total_score=5.0,
+            max_score=10.0,
+            grade_percentage=50.0,
+        )
+    )
 
     db.commit()
     db.refresh(e1)
@@ -115,9 +121,7 @@ class TestGetGradebook:
     ) -> None:
         e1, e2, p1, p2 = _setup_graded_class(db, test_user, test_class)
 
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["class_id"] == test_class.id
@@ -136,12 +140,8 @@ class TestGetGradebook:
         assert bob_row["average"] == 50.0
         assert bob_row["pass_status"] == "failing"
 
-    def test_empty_gradebook(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers
-        )
+    def test_empty_gradebook(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["rows"] == []
@@ -157,9 +157,7 @@ class TestGetGradebook:
     ) -> None:
         _setup_graded_class(db, test_user, test_class)
 
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
 
@@ -169,12 +167,8 @@ class TestGetGradebook:
         assert exam2_cell["score"] is None
         assert exam2_cell["percentage"] is None
 
-    def test_gradebook_non_owner_forbidden(
-        self, client: TestClient, test_class: Class, auth_headers_2: dict
-    ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers_2
-        )
+    def test_gradebook_non_owner_forbidden(self, client: TestClient, test_class: Class, auth_headers_2: dict) -> None:
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers_2)
         assert response.status_code == 403
 
     def test_gradebook_admin_can_view(
@@ -183,9 +177,7 @@ class TestGetGradebook:
         test_class: Class,
         auth_headers_admin: dict,
     ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers_admin
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers_admin)
         assert response.status_code == 200
 
 
@@ -220,9 +212,7 @@ class TestExportGradebook:
         assert "Exam 1" in header
         assert "Exam 2" in header
 
-    def test_export_csv_empty(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_export_csv_empty(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.get(
             f"/api/v1/classes/{test_class.id}/gradebook/export",
             headers=auth_headers,
@@ -255,9 +245,7 @@ class TestExportGradebook:
         # XLSX files start with PK (zip signature)
         assert response.content[:2] == b"PK"
 
-    def test_export_non_owner_forbidden(
-        self, client: TestClient, test_class: Class, auth_headers_2: dict
-    ) -> None:
+    def test_export_non_owner_forbidden(self, client: TestClient, test_class: Class, auth_headers_2: dict) -> None:
         response = client.get(
             f"/api/v1/classes/{test_class.id}/gradebook/export",
             headers=auth_headers_2,

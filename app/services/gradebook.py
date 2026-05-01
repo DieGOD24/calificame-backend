@@ -1,8 +1,6 @@
 import csv
 import io
-from typing import Any
 
-from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.clase import Class, ClassEnrollment, ClassProject
@@ -27,10 +25,7 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
     )
 
     class_projects = (
-        db.query(ClassProject)
-        .filter(ClassProject.class_id == clase.id)
-        .order_by(ClassProject.display_order)
-        .all()
+        db.query(ClassProject).filter(ClassProject.class_id == clase.id).order_by(ClassProject.display_order).all()
     )
 
     # Build column names
@@ -71,19 +66,23 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
         for pid in project_ids:
             exam = exam_lookup.get((student_id_norm, pid))
             if exam and exam.status == "graded" and exam.grade_percentage is not None:
-                cells.append(GradebookCell(
-                    project_id=pid,
-                    project_name=project_names[pid],
-                    score=exam.total_score,
-                    max_score=exam.max_score,
-                    percentage=exam.grade_percentage,
-                ))
+                cells.append(
+                    GradebookCell(
+                        project_id=pid,
+                        project_name=project_names[pid],
+                        score=exam.total_score,
+                        max_score=exam.max_score,
+                        percentage=exam.grade_percentage,
+                    )
+                )
                 scores.append(exam.grade_percentage)
             else:
-                cells.append(GradebookCell(
-                    project_id=pid,
-                    project_name=project_names[pid],
-                ))
+                cells.append(
+                    GradebookCell(
+                        project_id=pid,
+                        project_name=project_names[pid],
+                    )
+                )
 
         avg = round(sum(scores) / len(scores), 1) if scores else None
         if avg is not None:
@@ -91,13 +90,15 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
         else:
             pass_status = "pending"
 
-        rows.append(GradebookRow(
-            student_name=enrollment.student_name,
-            student_identifier=enrollment.student_identifier,
-            projects=cells,
-            average=avg,
-            pass_status=pass_status,
-        ))
+        rows.append(
+            GradebookRow(
+                student_name=enrollment.student_name,
+                student_identifier=enrollment.student_identifier,
+                projects=cells,
+                average=avg,
+                pass_status=pass_status,
+            )
+        )
 
     return GradebookResponse(
         class_id=clase.id,
@@ -108,9 +109,7 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
     )
 
 
-def get_student_progress(
-    db: Session, clase: Class, enrollment: ClassEnrollment
-) -> StudentProgressResponse:
+def get_student_progress(db: Session, clase: Class, enrollment: ClassEnrollment) -> StudentProgressResponse:
     """Get a single student's progress across all class projects."""
     gradebook = build_gradebook(db, clase)
     student_row = next(

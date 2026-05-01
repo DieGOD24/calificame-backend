@@ -4,12 +4,11 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import TestingSessionLocal
-
 from app.models.exam_answer import ExamAnswer
 from app.models.project import Project
 from app.models.question import Question
 from app.services.storage import LocalStorageService
+from tests.conftest import TestingSessionLocal
 
 
 def _create_student_exam(
@@ -204,18 +203,22 @@ class TestResetStuckEndpoint:
         from app.models.student_exam import StudentExam
 
         for _ in range(2):
-            db.add(StudentExam(
+            db.add(
+                StudentExam(
+                    id=str(uuid4()),
+                    project_id=test_project.id,
+                    file_path="/tmp/p.pdf",
+                    status="processing",
+                )
+            )
+        db.add(
+            StudentExam(
                 id=str(uuid4()),
                 project_id=test_project.id,
-                file_path="/tmp/p.pdf",
-                status="processing",
-            ))
-        db.add(StudentExam(
-            id=str(uuid4()),
-            project_id=test_project.id,
-            file_path="/tmp/u.pdf",
-            status="uploaded",
-        ))
+                file_path="/tmp/u.pdf",
+                status="uploaded",
+            )
+        )
         db.commit()
 
         response = client.post(
@@ -285,6 +288,7 @@ class TestGradeAllIncludesProcessing:
 
         def fake_grade(bg_db, exam, qs):
             from datetime import UTC, datetime
+
             exam.status = "graded"
             exam.total_score = 10.0
             exam.max_score = 10.0
@@ -294,9 +298,11 @@ class TestGradeAllIncludesProcessing:
             bg_db.commit()
             return exam
 
-        with patch.object(grading_module, "GradingService") as mock_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as mock_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             mock_svc = MagicMock()
             mock_svc.grade_exam.side_effect = fake_grade
             mock_cls.return_value = mock_svc
@@ -338,8 +344,10 @@ class TestGradingTransactionSafety:
         db.refresh(exam)
 
         # Make storage.get_file return something readable but break the agent
-        with patch("app.services.grading.GradingService.__init__", return_value=None) as _, \
-             patch("app.agents.grading_agent.GradingAgent") as mock_agent_cls:
+        with (
+            patch("app.services.grading.GradingService.__init__", return_value=None) as _,
+            patch("app.agents.grading_agent.GradingAgent") as mock_agent_cls,
+        ):
             svc = GradingService.__new__(GradingService)
             svc.storage = MagicMock()
             svc.storage.get_file = MagicMock(return_value=b"%PDF-1.4 x")
@@ -359,6 +367,7 @@ class TestGradingTransactionSafety:
 
         # No partial answers should be persisted
         from app.models.exam_answer import ExamAnswer
+
         partial = db.query(ExamAnswer).filter(ExamAnswer.student_exam_id == exam.id).count()
         assert partial == 0
 

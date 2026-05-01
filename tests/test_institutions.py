@@ -3,7 +3,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.institution import Institution, InstitutionInvitation, InstitutionMember
+from app.models.institution import Institution, InstitutionMember
 from app.models.user import User
 
 
@@ -29,9 +29,7 @@ def _make_institution(db: Session, owner: User, slug: str = "test-inst") -> Inst
 
 
 class TestCreateInstitution:
-    def test_create_valid(
-        self, client: TestClient, test_admin_user: User, auth_headers_admin: dict
-    ) -> None:
+    def test_create_valid(self, client: TestClient, test_admin_user: User, auth_headers_admin: dict) -> None:
         response = client.post(
             "/api/v1/institutions/",
             headers=auth_headers_admin,
@@ -76,9 +74,7 @@ class TestListInstitutions:
         data = response.json()
         assert len(data) >= 2
 
-    def test_admin_empty_list(
-        self, client: TestClient, test_admin_user: User, auth_headers_admin: dict
-    ) -> None:
+    def test_admin_empty_list(self, client: TestClient, test_admin_user: User, auth_headers_admin: dict) -> None:
         response = client.get("/api/v1/institutions/", headers=auth_headers_admin)
         assert response.status_code == 200
         assert response.json() == []
@@ -88,18 +84,14 @@ class TestListInstitutions:
     ) -> None:
         _make_institution(db, test_admin_user, slug="page-a")
         _make_institution(db, test_admin_user, slug="page-b")
-        response = client.get(
-            "/api/v1/institutions/", headers=auth_headers_admin, params={"page_size": 1}
-        )
+        response = client.get("/api/v1/institutions/", headers=auth_headers_admin, params={"page_size": 1})
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
 
 
 class TestGetInstitution:
-    def test_get_valid(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_get_valid(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         inst = _make_institution(db, test_user, slug="get-me")
         response = client.get(f"/api/v1/institutions/{inst.id}", headers=auth_headers)
         assert response.status_code == 200
@@ -166,9 +158,7 @@ class TestMembers:
         self, client: TestClient, db: Session, test_admin_user: User, auth_headers_admin: dict
     ) -> None:
         inst = _make_institution(db, test_admin_user, slug="mem-inst")
-        response = client.get(
-            f"/api/v1/institutions/{inst.id}/members", headers=auth_headers_admin
-        )
+        response = client.get(f"/api/v1/institutions/{inst.id}/members", headers=auth_headers_admin)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1

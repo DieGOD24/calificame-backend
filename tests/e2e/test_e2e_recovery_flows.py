@@ -6,6 +6,7 @@ Covers scenarios that aren't part of the happy path:
 - Partial grading completion (some exams succeed, some fail)
 - Question editing after answer key processing
 """
+
 import io
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -14,7 +15,6 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models.exam_answer import ExamAnswer
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
@@ -77,9 +77,11 @@ class TestRegradeFlow:
         from app.api import grading as grading_module
 
         # First grade pass: score 50%
-        with patch.object(grading_module, "GradingService") as svc_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as svc_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             svc = MagicMock()
 
             def grade_low(bg_db, exam, qs):
@@ -101,21 +103,22 @@ class TestRegradeFlow:
             assert r.status_code == 200
 
         # Verify first score
-        r = client.get(
-            f"/api/v1/projects/{project.id}/grading/summary", headers=auth_headers
-        )
+        r = client.get(f"/api/v1/projects/{project.id}/grading/summary", headers=auth_headers)
         assert r.json()["average_percentage"] == pytest.approx(50.0, rel=0.01)
 
         # Mark task as completed so the next grade-all isn't blocked by 409
         from app.models.task_log import TaskLog
+
         for task in db.query(TaskLog).filter(TaskLog.project_id == project.id).all():
             task.status = "completed"
         db.commit()
 
         # Regrade pass: score 90%
-        with patch.object(grading_module, "GradingService") as svc_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as svc_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             svc = MagicMock()
 
             def grade_high(bg_db, exam, qs):
@@ -137,9 +140,7 @@ class TestRegradeFlow:
             assert r.status_code == 200
 
         # Verify regrade reflected
-        r = client.get(
-            f"/api/v1/projects/{project.id}/grading/summary", headers=auth_headers
-        )
+        r = client.get(f"/api/v1/projects/{project.id}/grading/summary", headers=auth_headers)
         assert r.json()["average_percentage"] == pytest.approx(90.0, rel=0.01)
 
 
@@ -210,9 +211,11 @@ class TestPartialCompletionFlow:
 
         from app.api import grading as grading_module
 
-        with patch.object(grading_module, "GradingService") as svc_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as svc_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             svc = MagicMock()
             call_count = {"n": 0}
 

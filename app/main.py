@@ -10,12 +10,10 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from app.rate_limit import limiter
-
 from app.api.analytics import router as analytics_router
 from app.api.answer_keys import router as answer_keys_router
-from app.api.classes import router as classes_router
 from app.api.auth import router as auth_router
+from app.api.classes import router as classes_router
 from app.api.grading import router as grading_router
 from app.api.images import router as images_router
 from app.api.institutions import router as institutions_router
@@ -27,6 +25,7 @@ from app.api.tasks import router as tasks_router
 from app.config import settings
 from app.database import Base, engine
 from app.logging_config import setup_logging
+from app.rate_limit import limiter
 
 
 def _recover_stale_work() -> None:
@@ -42,11 +41,7 @@ def _recover_stale_work() -> None:
 
     db = SessionLocal()
     try:
-        stale_tasks = (
-            db.query(TaskLog)
-            .filter(TaskLog.status.in_(["pending", "processing"]))
-            .all()
-        )
+        stale_tasks = db.query(TaskLog).filter(TaskLog.status.in_(["pending", "processing"])).all()
         for task in stale_tasks:
             task.status = "failed"
             task.error_message = "Task interrupted by server restart. Please retry."
@@ -54,17 +49,10 @@ def _recover_stale_work() -> None:
             db.commit()
             logger.info("Recovered {} stale tasks", len(stale_tasks))
 
-        stuck_exams = (
-            db.query(StudentExam)
-            .filter(StudentExam.status == "processing")
-            .all()
-        )
+        stuck_exams = db.query(StudentExam).filter(StudentExam.status == "processing").all()
         for exam in stuck_exams:
             exam.status = "uploaded"
-            exam.error_message = (
-                "Procesamiento interrumpido por reinicio del servidor. "
-                "Reintenta la calificacion."
-            )
+            exam.error_message = "Procesamiento interrumpido por reinicio del servidor. Reintenta la calificacion."
         if stuck_exams:
             db.commit()
             logger.info("Recovered {} stuck student exams", len(stuck_exams))
@@ -164,6 +152,7 @@ def health_check() -> dict:
     checks = {"api": "healthy", "version": "3.0.0"}
     try:
         from app.database import SessionLocal
+
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()

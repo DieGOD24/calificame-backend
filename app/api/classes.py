@@ -6,10 +6,11 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, require_role
-from app.rate_limit import limiter
+from app.config import settings
 from app.models.clase import Class, ClassEnrollment, ClassProject
 from app.models.project import Project
 from app.models.user import User, UserRole
+from app.rate_limit import limiter
 from app.schemas.clase import (
     BulkEnrollResponse,
     ClassCreate,
@@ -24,7 +25,6 @@ from app.schemas.clase import (
     GradebookResponse,
     StudentProgressResponse,
 )
-from app.config import settings
 from app.services.enrollment import auto_link_users, flatten_to_text, parse_student_file
 from app.services.gradebook import (
     build_gradebook,
@@ -132,9 +132,7 @@ def list_classes(
         query = db.query(Class)
     elif current_user.role == UserRole.STUDENT.value:
         enrolled_class_ids = (
-            db.query(ClassEnrollment.class_id)
-            .filter(ClassEnrollment.user_id == current_user.id)
-            .scalar_subquery()
+            db.query(ClassEnrollment.class_id).filter(ClassEnrollment.user_id == current_user.id).scalar_subquery()
         )
         query = db.query(Class).filter(Class.id.in_(enrolled_class_ids))
     else:
@@ -144,12 +142,7 @@ def list_classes(
         query = query.filter(Class.semester == semester)
 
     total = query.count()
-    classes = (
-        query.order_by(Class.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    classes = query.order_by(Class.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     return ClassListResponse(
         items=[_class_to_response(c) for c in classes],
@@ -327,6 +320,7 @@ async def bulk_enroll(
             )
         try:
             from app.agents.enrollment_extraction_agent import EnrollmentExtractionAgent
+
             agent = EnrollmentExtractionAgent()
             ai_rows = agent.execute(table_text=table_text)
         except Exception as exc:
@@ -362,9 +356,7 @@ async def bulk_enroll(
     # Get existing identifiers for this class
     existing_ids = set(
         row[0]
-        for row in db.query(ClassEnrollment.student_identifier)
-        .filter(ClassEnrollment.class_id == class_id)
-        .all()
+        for row in db.query(ClassEnrollment.student_identifier).filter(ClassEnrollment.class_id == class_id).all()
     )
 
     added = 0
@@ -473,11 +465,7 @@ def add_class_project(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your project")
 
     # Check if already linked
-    existing = (
-        db.query(ClassProject)
-        .filter(ClassProject.project_id == data.project_id)
-        .first()
-    )
+    existing = db.query(ClassProject).filter(ClassProject.project_id == data.project_id).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -524,10 +512,7 @@ def list_class_projects(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     class_projects = (
-        db.query(ClassProject)
-        .filter(ClassProject.class_id == class_id)
-        .order_by(ClassProject.display_order)
-        .all()
+        db.query(ClassProject).filter(ClassProject.class_id == class_id).order_by(ClassProject.display_order).all()
     )
 
     return [
@@ -580,11 +565,7 @@ def reorder_class_projects(
     clase = _get_class_or_404(db, class_id)
     _check_class_owner(clase, current_user)
 
-    class_projects = (
-        db.query(ClassProject)
-        .filter(ClassProject.class_id == class_id)
-        .all()
-    )
+    class_projects = db.query(ClassProject).filter(ClassProject.class_id == class_id).all()
     cp_map = {cp.id: cp for cp in class_projects}
 
     for idx, cp_id in enumerate(data.order):

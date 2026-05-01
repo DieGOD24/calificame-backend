@@ -1,8 +1,9 @@
 """Tests for student enrollment parsing: heuristic parser + AI fallback."""
+
 import asyncio
 import io
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import openpyxl
 from fastapi.testclient import TestClient
@@ -44,10 +45,37 @@ class TestHeuristicParser:
             [""] + [None] * 7,
             ["Horario: / (AULA:4B-201)", None, None, None, None, None, None, None],
             ["Documento", "Nombres", "Telefono", None, "Celular", "EMAIL", None, "Cursos ILEX aprobado"],
-            ["1116434602", "ALVAREZ GUERRA SANTIAGO", "3154697216", None, "3209897592", "s.alvarez5@utp.edu.co", None, "3"],
-            ["1004720362", "BAENA VELASQUEZ JUAN CAMILO", "3300690", None, "3225984622", "j.baena@utp.edu.co", None, "3"],
+            [
+                "1116434602",
+                "ALVAREZ GUERRA SANTIAGO",
+                "3154697216",
+                None,
+                "3209897592",
+                "s.alvarez5@utp.edu.co",
+                None,
+                "3",
+            ],
+            [
+                "1004720362",
+                "BAENA VELASQUEZ JUAN CAMILO",
+                "3300690",
+                None,
+                "3225984622",
+                "j.baena@utp.edu.co",
+                None,
+                "3",
+            ],
             [None] * 8,
-            ["1233898369", "BARRIOS GONZALEZ LIZETH JULIANA", "Sin Telefono", None, "3043329170", "l.barrios@utp.edu.co", None, "3"],
+            [
+                "1233898369",
+                "BARRIOS GONZALEZ LIZETH JULIANA",
+                "Sin Telefono",
+                None,
+                "3043329170",
+                "l.barrios@utp.edu.co",
+                None,
+                "3",
+            ],
         ]
         content = _make_xlsx(rows)
         records = _parse_xlsx(content)
@@ -129,7 +157,9 @@ class TestBulkEnrollEndpoint:
         response = client.post(
             f"/api/v1/classes/{test_class.id}/enrollments/bulk",
             headers=auth_headers,
-            files={"file": ("roster.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            files={
+                "file": ("roster.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            },
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -153,11 +183,10 @@ class TestBulkEnrollEndpoint:
         ]
         content = _make_xlsx(rows)
 
-        with patch(
-            "app.agents.enrollment_extraction_agent.EnrollmentExtractionAgent.execute"
-        ) as mock_execute, patch(
-            "app.api.classes.settings"
-        ) as mock_settings:
+        with (
+            patch("app.agents.enrollment_extraction_agent.EnrollmentExtractionAgent.execute") as mock_execute,
+            patch("app.api.classes.settings") as mock_settings,
+        ):
             mock_settings.OPENAI_API_KEY = "sk-test"
             mock_settings.MAX_FILE_SIZE_MB = 50
             mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
@@ -169,7 +198,9 @@ class TestBulkEnrollEndpoint:
             response = client.post(
                 f"/api/v1/classes/{test_class.id}/enrollments/bulk",
                 headers=auth_headers,
-                files={"file": ("weird.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                files={
+                    "file": ("weird.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                },
             )
 
         assert response.status_code == 200, response.text
@@ -208,7 +239,9 @@ class TestBulkEnrollEndpoint:
             response = client.post(
                 f"/api/v1/classes/{test_class.id}/enrollments/bulk",
                 headers=auth_headers,
-                files={"file": ("bad.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                files={
+                    "file": ("bad.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                },
             )
         assert response.status_code == 400
         assert "columna" in response.json()["detail"].lower()

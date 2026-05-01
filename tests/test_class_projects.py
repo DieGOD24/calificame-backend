@@ -78,9 +78,7 @@ class TestAddClassProject:
         )
         assert response.status_code == 403
 
-    def test_nonexistent_project_404(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_nonexistent_project_404(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.post(
             f"/api/v1/classes/{test_class.id}/projects",
             headers=auth_headers,
@@ -121,20 +119,14 @@ class TestListClassProjects:
         db.add(cp)
         db.commit()
 
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
         assert data[0]["project_id"] == test_project.id
 
-    def test_list_empty(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers
-        )
+    def test_list_empty(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
+        response = client.get(f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers)
         assert response.status_code == 200
         assert response.json() == []
 
@@ -164,14 +156,10 @@ class TestRemoveClassProject:
         assert response.status_code == 204
 
         # Verify removed
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}/projects", headers=auth_headers)
         assert response.json() == []
 
-    def test_nonexistent_404(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_nonexistent_404(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.delete(
             f"/api/v1/classes/{test_class.id}/projects/nonexistent-id",
             headers=auth_headers,
@@ -232,9 +220,7 @@ class TestReorderClassProjects:
         assert data[1]["id"] == cp1.id
         assert data[1]["display_order"] == 1
 
-    def test_invalid_ids(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_invalid_ids(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.put(
             f"/api/v1/classes/{test_class.id}/projects/reorder",
             headers=auth_headers,

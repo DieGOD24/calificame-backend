@@ -57,6 +57,7 @@ def _stub_ai_enrollment_agent(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Force import so monkeypatch.setattr finds the attribute.
     import app.agents.enrollment_extraction_agent as _agent_mod  # noqa: I001
+
     monkeypatch.setattr(_agent_mod, "EnrollmentExtractionAgent", _StubAgent)
 
 

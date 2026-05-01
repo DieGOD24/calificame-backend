@@ -3,10 +3,9 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.clase import Class, ClassEnrollment, ClassProject
+from app.models.clase import Class
 from app.models.institution import Institution, InstitutionMember
 from app.models.project import Project, ProjectStatus
-from app.models.question import Question
 from app.models.student_exam import StudentExam
 from app.models.user import User
 
@@ -51,16 +50,12 @@ def _make_graded_exam(
 
 
 class TestProjectAnalytics:
-    def test_with_graded_exams(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_with_graded_exams(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         project = _make_project(db, test_user)
         _make_graded_exam(db, project, percentage=80.0, score=8.0)
         _make_graded_exam(db, project, identifier="STU-002", percentage=60.0, score=6.0)
 
-        response = client.get(
-            f"/api/v1/analytics/projects/{project.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/analytics/projects/{project.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["project_id"] == project.id
@@ -69,22 +64,16 @@ class TestProjectAnalytics:
         assert data["average_percentage"] == 70.0
         assert data["pass_rate"] is not None
 
-    def test_without_exams(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_without_exams(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         project = _make_project(db, test_user)
-        response = client.get(
-            f"/api/v1/analytics/projects/{project.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/analytics/projects/{project.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["graded_count"] == 0
         assert data["average_percentage"] is None
 
     def test_not_found(self, client: TestClient, auth_headers: dict) -> None:
-        response = client.get(
-            "/api/v1/analytics/projects/nonexistent", headers=auth_headers
-        )
+        response = client.get("/api/v1/analytics/projects/nonexistent", headers=auth_headers)
         assert response.status_code == 404
 
     def test_not_authorized(
@@ -96,31 +85,23 @@ class TestProjectAnalytics:
         auth_headers_2: dict,
     ) -> None:
         project = _make_project(db, test_user)
-        response = client.get(
-            f"/api/v1/analytics/projects/{project.id}", headers=auth_headers_2
-        )
+        response = client.get(f"/api/v1/analytics/projects/{project.id}", headers=auth_headers_2)
         assert response.status_code == 403
 
 
 class TestStudentProgress:
-    def test_valid_student(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_valid_student(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         project = _make_project(db, test_user)
         _make_graded_exam(db, project, identifier="STU-100", percentage=90.0)
 
-        response = client.get(
-            "/api/v1/analytics/students/STU-100", headers=auth_headers
-        )
+        response = client.get("/api/v1/analytics/students/STU-100", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
         assert data[0]["student_identifier"] == "STU-100"
 
     def test_no_records(self, client: TestClient, auth_headers: dict) -> None:
-        response = client.get(
-            "/api/v1/analytics/students/NONEXISTENT", headers=auth_headers
-        )
+        response = client.get("/api/v1/analytics/students/NONEXISTENT", headers=auth_headers)
         assert response.status_code == 404
 
 
@@ -144,18 +125,14 @@ class TestInstitutionAnalytics:
         db.add(member)
         db.commit()
 
-        response = client.get(
-            f"/api/v1/analytics/institutions/{inst.id}", headers=auth_headers_admin
-        )
+        response = client.get(f"/api/v1/analytics/institutions/{inst.id}", headers=auth_headers_admin)
         assert response.status_code == 200
         data = response.json()
         assert data["institution_id"] == inst.id
         assert data["institution_name"] == "Analytics Inst"
 
     def test_not_found(self, client: TestClient, auth_headers_admin: dict, test_admin_user: User) -> None:
-        response = client.get(
-            "/api/v1/analytics/institutions/nonexistent", headers=auth_headers_admin
-        )
+        response = client.get("/api/v1/analytics/institutions/nonexistent", headers=auth_headers_admin)
         assert response.status_code == 404
 
     def test_not_authorized(
@@ -179,9 +156,7 @@ class TestInstitutionAnalytics:
         db.add(member)
         db.commit()
 
-        response = client.get(
-            f"/api/v1/analytics/institutions/{inst.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/analytics/institutions/{inst.id}", headers=auth_headers)
         assert response.status_code == 403
 
 
@@ -204,16 +179,12 @@ class TestClassAnalytics:
         db.add(clase)
         db.commit()
 
-        response = client.get(
-            f"/api/v1/analytics/classes/{clase.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/analytics/classes/{clase.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["class_id"] == clase.id
         assert data["class_name"] == "Math 101"
 
     def test_not_found(self, client: TestClient, auth_headers: dict) -> None:
-        response = client.get(
-            "/api/v1/analytics/classes/nonexistent", headers=auth_headers
-        )
+        response = client.get("/api/v1/analytics/classes/nonexistent", headers=auth_headers)
         assert response.status_code == 404

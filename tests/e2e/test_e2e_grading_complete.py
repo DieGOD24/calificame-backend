@@ -9,6 +9,7 @@ Plus integration tests for:
   - File size validation
   - Bulk enrollment workflow
 """
+
 import io
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -109,6 +110,7 @@ class TestE2ECompleteGradingFlow:
 
         # Mark project as confirmed
         from app.models.project import Project
+
         project = db.query(Project).filter(Project.id == project_id).first()
         project.status = ProjectStatus.CONFIRMED.value
         db.commit()
@@ -128,9 +130,11 @@ class TestE2ECompleteGradingFlow:
         # 6. Grade all (with mocked grading service + test DB session)
         from app.api import grading as grading_module
 
-        with patch.object(grading_module, "GradingService") as mock_svc_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as mock_svc_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             mock_svc = MagicMock()
             mock_svc_cls.return_value = mock_svc
 
@@ -141,17 +145,19 @@ class TestE2ECompleteGradingFlow:
                 exam.grade_percentage = 83.33
                 exam.graded_at = datetime.now(UTC)
                 for q in qs:
-                    bg_db.add(ExamAnswer(
-                        id=str(uuid4()),
-                        student_exam_id=exam.id,
-                        question_id=q.id,
-                        extracted_answer="answer",
-                        is_correct=True,
-                        score=q.points,
-                        max_score=q.points,
-                        feedback="Good",
-                        confidence=0.9,
-                    ))
+                    bg_db.add(
+                        ExamAnswer(
+                            id=str(uuid4()),
+                            student_exam_id=exam.id,
+                            question_id=q.id,
+                            extracted_answer="answer",
+                            is_correct=True,
+                            score=q.points,
+                            max_score=q.points,
+                            feedback="Good",
+                            confidence=0.9,
+                        )
+                    )
                 bg_db.commit()
                 return exam
 
@@ -269,9 +275,7 @@ class TestE2EClassFlow:
         assert resp.json()["added"] == 2
 
         # 4. Verify enrollments listed
-        resp = client.get(
-            f"/api/v1/classes/{class_id}/enrollments", headers=headers
-        )
+        resp = client.get(f"/api/v1/classes/{class_id}/enrollments", headers=headers)
         assert resp.status_code == 200
         enrollments = resp.json()
         assert len(enrollments) == 2
@@ -298,6 +302,7 @@ class TestE2EClassFlow:
 
         _seed_questions(db, project_id, count=2)
         from app.models.project import Project
+
         project = db.query(Project).filter(Project.id == project_id).first()
         project.status = ProjectStatus.CONFIRMED.value
         db.commit()
@@ -324,9 +329,11 @@ class TestE2EClassFlow:
         # 8. Grade all (mocked + test DB)
         from app.api import grading as grading_module
 
-        with patch.object(grading_module, "GradingService") as mock_svc_cls, \
-             patch.object(grading_module, "SessionLocal", TestingSessionLocal), \
-             patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"):
+        with (
+            patch.object(grading_module, "GradingService") as mock_svc_cls,
+            patch.object(grading_module, "SessionLocal", TestingSessionLocal),
+            patch.object(grading_module.settings, "OPENAI_API_KEY", "sk-test"),
+        ):
             mock_svc = MagicMock()
             mock_svc_cls.return_value = mock_svc
 
@@ -348,9 +355,7 @@ class TestE2EClassFlow:
             assert resp.status_code == 200
 
         # 9. Gradebook should match enrolled students
-        resp = client.get(
-            f"/api/v1/classes/{class_id}/gradebook", headers=headers
-        )
+        resp = client.get(f"/api/v1/classes/{class_id}/gradebook", headers=headers)
         assert resp.status_code == 200
         gradebook = resp.json()
         assert len(gradebook["rows"]) == 2

@@ -210,9 +210,7 @@ def delete_student_exam(
         storage = get_storage_service()
         storage.delete_file(exam.file_path)
     except Exception as exc:
-        logger.warning(
-            "Failed to delete file {} for exam {}: {}", exam.file_path, exam_id, exc
-        )
+        logger.warning("Failed to delete file {} for exam {}: {}", exam.file_path, exam_id, exc)
 
     logger.info("Deleted exam {} from project {}", exam_id, project_id)
     db.delete(exam)

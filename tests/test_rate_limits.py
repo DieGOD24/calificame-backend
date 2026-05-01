@@ -3,15 +3,16 @@
 The limiter is disabled by default in test env (TESTING=1) — these tests
 re-enable it for the duration of the test using monkeypatch + reset.
 """
+
 import io
 
-import pytest
 from fastapi.testclient import TestClient
 
 
 def _enable_limiter(monkeypatch):
     """Re-enable the slowapi limiter for this test only."""
     from app import rate_limit as rl
+
     monkeypatch.setattr(rl.limiter, "enabled", True)
     # Reset internal storage so each test starts with a fresh counter
     try:
@@ -76,9 +77,7 @@ class TestRateLimitsUpload:
             headers=auth_headers,
             files=[("files", ("img11.png", io.BytesIO(png), "image/png"))],
         )
-        assert r11.status_code == 429, (
-            f"Expected 429 on 11th call, got {r11.status_code} (last={last_status})"
-        )
+        assert r11.status_code == 429, f"Expected 429 on 11th call, got {r11.status_code} (last={last_status})"
 
 
 class TestRateLimitsBulkEnroll:

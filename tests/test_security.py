@@ -3,16 +3,14 @@
 from datetime import timedelta
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.clase import Class
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project
 from app.models.user import User
-from app.services.auth import create_access_token, hash_password
-from app.services.validators import validate_file_upload, validate_password
-
+from app.services.auth import create_access_token
+from app.services.validators import validate_file_upload
 
 # ---------------------------------------------------------------------------
 # TestPasswordPolicy

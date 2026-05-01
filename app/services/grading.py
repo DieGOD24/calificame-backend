@@ -102,11 +102,7 @@ class GradingService:
 
             # Re-fetch the exam so we have a clean attached instance after rollback
             try:
-                fresh = (
-                    db.query(StudentExam)
-                    .filter(StudentExam.id == student_exam.id)
-                    .first()
-                )
+                fresh = db.query(StudentExam).filter(StudentExam.id == student_exam.id).first()
                 if fresh is not None:
                     fresh.status = "error"
                     fresh.error_message = str(e)[:500]

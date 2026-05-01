@@ -135,13 +135,7 @@ def list_users(
 ) -> list[User]:
     """List users with pagination (Developer/Admin only)."""
     offset = (page - 1) * per_page
-    return (
-        db.query(User)
-        .order_by(User.created_at.desc())
-        .offset(offset)
-        .limit(per_page)
-        .all()
-    )
+    return db.query(User).order_by(User.created_at.desc()).offset(offset).limit(per_page).all()
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)

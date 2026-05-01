@@ -29,9 +29,7 @@ def _make_png_with_content(width: int = 200, height: int = 200) -> bytes:
 
 
 class TestAnalyzeImages:
-    def test_upload_valid_png(
-        self, client: TestClient, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_upload_valid_png(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
         png_data = _make_png_with_content()
         response = client.post(
             "/api/v1/pdf-generator/analyze",
@@ -46,6 +44,7 @@ class TestAnalyzeImages:
         assert data[0]["original_height"] == 200
         # Verify processed_image_base64 is valid base64
         import base64
+
         decoded = base64.b64decode(data[0]["processed_image_base64"])
         assert len(decoded) > 0
 
@@ -61,9 +60,7 @@ class TestAnalyzeImages:
 
 
 class TestCropImage:
-    def test_valid_crop(
-        self, client: TestClient, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_valid_crop(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
         png_data = _make_png_bytes(200, 200)
         response = client.post(
             "/api/v1/pdf-generator/crop",
@@ -77,9 +74,7 @@ class TestCropImage:
         assert data["height"] == 50
         assert "cropped_image_base64" in data
 
-    def test_crop_exceeds_dimensions(
-        self, client: TestClient, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_crop_exceeds_dimensions(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
         png_data = _make_png_bytes(100, 100)
         response = client.post(
             "/api/v1/pdf-generator/crop",
@@ -131,15 +126,11 @@ class TestImageProcessing:
         # Stroke area (130 gray) should become darker
         stroke_original = 130.0
         stroke_enhanced = sum(enhanced.getpixel((100, 100))) / 3
-        assert stroke_enhanced < stroke_original, (
-            f"Stroke should darken: {stroke_enhanced} not < {stroke_original}"
-        )
+        assert stroke_enhanced < stroke_original, f"Stroke should darken: {stroke_enhanced} not < {stroke_original}"
 
         # Paper area (255 white) should stay bright (≥240)
         paper_enhanced = sum(enhanced.getpixel((10, 10))) / 3
-        assert paper_enhanced >= 240, (
-            f"Paper should stay bright: {paper_enhanced} < 240"
-        )
+        assert paper_enhanced >= 240, f"Paper should stay bright: {paper_enhanced} < 240"
 
     def test_process_image_pipeline(self) -> None:
         """process_image should return valid PNG bytes."""
@@ -156,9 +147,7 @@ class TestImageProcessing:
 
 
 class TestGeneratePdf:
-    def test_valid_generation(
-        self, client: TestClient, db: None, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_valid_generation(self, client: TestClient, db: None, test_user: User, auth_headers: dict) -> None:
         png_data = _make_png_bytes()
         response = client.post(
             "/api/v1/pdf-generator/generate",
@@ -178,9 +167,7 @@ class TestGeneratePdf:
         )
         assert response.status_code in (400, 422)
 
-    def test_multiple_pages(
-        self, client: TestClient, db: None, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_multiple_pages(self, client: TestClient, db: None, test_user: User, auth_headers: dict) -> None:
         png1 = _make_png_bytes(100, 100)
         png2 = _make_png_bytes(200, 300)
         response = client.post(

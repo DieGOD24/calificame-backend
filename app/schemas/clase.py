@@ -2,8 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # --- Class ---
+
 
 class ClassCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -51,6 +51,7 @@ class ClassListResponse(BaseModel):
 
 # --- Enrollment ---
 
+
 class ClassEnrollmentCreate(BaseModel):
     student_name: str = Field(..., min_length=1, max_length=255)
     student_identifier: str = Field(..., min_length=1, max_length=100)
@@ -78,6 +79,7 @@ class BulkEnrollResponse(BaseModel):
 
 # --- Class Projects ---
 
+
 class ClassProjectAdd(BaseModel):
     project_id: str
 
@@ -97,6 +99,7 @@ class ClassProjectResponse(BaseModel):
 
 
 # --- Gradebook ---
+
 
 class GradebookCell(BaseModel):
     project_id: str

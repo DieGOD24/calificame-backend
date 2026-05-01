@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, get_db, get_user_project
 from app.config import settings
 from app.database import SessionLocal
-from app.rate_limit import limiter
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
 from app.models.task_log import TaskLog
 from app.models.user import User
+from app.rate_limit import limiter
 from app.schemas.grading import GradingSummary
 from app.schemas.student_exam import (
     ExamAnswerResponse,
@@ -99,7 +99,9 @@ def _run_grade_all_background(task_id: str, project_id: str, regrade: bool) -> N
                 exam.status = "error"
                 exam.error_message = "OpenAI API key is invalid or not configured."
                 task.status = "failed"
-                task.error_message = "OpenAI API key is invalid or not configured. Configure a valid key to grade exams."
+                task.error_message = (
+                    "OpenAI API key is invalid or not configured. Configure a valid key to grade exams."
+                )
                 task.completed_at = datetime.now(UTC)
                 db.commit()
                 return

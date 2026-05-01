@@ -43,9 +43,7 @@ class TestCreateClass:
         assert data["description"] is None
         assert data["schedule"] is None
 
-    def test_create_class_student_forbidden(
-        self, client: TestClient, auth_headers_student: dict
-    ) -> None:
+    def test_create_class_student_forbidden(self, client: TestClient, auth_headers_student: dict) -> None:
         response = client.post(
             "/api/v1/classes/",
             headers=auth_headers_student,
@@ -70,9 +68,7 @@ class TestCreateClass:
 
 
 class TestListClasses:
-    def test_professor_sees_own_classes(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_professor_sees_own_classes(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.get("/api/v1/classes/", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -92,9 +88,7 @@ class TestListClasses:
         assert data["total"] == 1
         assert data["items"][0]["id"] == test_class.id
 
-    def test_admin_sees_all_classes(
-        self, client: TestClient, test_class: Class, auth_headers_admin: dict
-    ) -> None:
+    def test_admin_sees_all_classes(self, client: TestClient, test_class: Class, auth_headers_admin: dict) -> None:
         response = client.get("/api/v1/classes/", headers=auth_headers_admin)
         assert response.status_code == 200
         data = response.json()
@@ -107,32 +101,22 @@ class TestListClasses:
         assert data["total"] == 0
         assert data["items"] == []
 
-    def test_filter_by_semester(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
-        response = client.get(
-            "/api/v1/classes/", headers=auth_headers, params={"semester": "2026-1"}
-        )
+    def test_filter_by_semester(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
+        response = client.get("/api/v1/classes/", headers=auth_headers, params={"semester": "2026-1"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 1
         assert all(c["semester"] == "2026-1" for c in data["items"])
 
-    def test_filter_by_semester_no_match(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
-        response = client.get(
-            "/api/v1/classes/", headers=auth_headers, params={"semester": "9999-9"}
-        )
+    def test_filter_by_semester_no_match(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
+        response = client.get("/api/v1/classes/", headers=auth_headers, params={"semester": "9999-9"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 0
 
 
 class TestGetClass:
-    def test_owner_can_view(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_owner_can_view(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.get(f"/api/v1/classes/{test_class.id}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -146,19 +130,13 @@ class TestGetClass:
         test_enrollment: ClassEnrollment,
         auth_headers_student: dict,
     ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers_student
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}", headers=auth_headers_student)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == test_class.id
 
-    def test_other_user_forbidden(
-        self, client: TestClient, test_class: Class, auth_headers_2: dict
-    ) -> None:
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers_2
-        )
+    def test_other_user_forbidden(self, client: TestClient, test_class: Class, auth_headers_2: dict) -> None:
+        response = client.get(f"/api/v1/classes/{test_class.id}", headers=auth_headers_2)
         assert response.status_code == 403
 
     def test_nonexistent_class_404(self, client: TestClient, auth_headers: dict) -> None:
@@ -167,9 +145,7 @@ class TestGetClass:
 
 
 class TestUpdateClass:
-    def test_update_fields(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
+    def test_update_fields(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
         response = client.put(
             f"/api/v1/classes/{test_class.id}",
             headers=auth_headers,
@@ -180,9 +156,7 @@ class TestUpdateClass:
         assert data["name"] == "Updated Name"
         assert data["description"] == "Updated desc"
 
-    def test_update_non_owner_forbidden(
-        self, client: TestClient, test_class: Class, auth_headers_2: dict
-    ) -> None:
+    def test_update_non_owner_forbidden(self, client: TestClient, test_class: Class, auth_headers_2: dict) -> None:
         response = client.put(
             f"/api/v1/classes/{test_class.id}",
             headers=auth_headers_2,
@@ -192,26 +166,16 @@ class TestUpdateClass:
 
 
 class TestDeleteClass:
-    def test_owner_can_delete(
-        self, client: TestClient, test_class: Class, auth_headers: dict
-    ) -> None:
-        response = client.delete(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers
-        )
+    def test_owner_can_delete(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:
+        response = client.delete(f"/api/v1/classes/{test_class.id}", headers=auth_headers)
         assert response.status_code == 204
 
         # Verify deletion
-        response = client.get(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/classes/{test_class.id}", headers=auth_headers)
         assert response.status_code == 404
 
-    def test_non_owner_forbidden(
-        self, client: TestClient, test_class: Class, auth_headers_2: dict
-    ) -> None:
-        response = client.delete(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers_2
-        )
+    def test_non_owner_forbidden(self, client: TestClient, test_class: Class, auth_headers_2: dict) -> None:
+        response = client.delete(f"/api/v1/classes/{test_class.id}", headers=auth_headers_2)
         assert response.status_code == 403
 
     def test_delete_cascades_enrollments(
@@ -223,9 +187,7 @@ class TestDeleteClass:
         auth_headers: dict,
     ) -> None:
         enrollment_id = test_enrollment.id
-        response = client.delete(
-            f"/api/v1/classes/{test_class.id}", headers=auth_headers
-        )
+        response = client.delete(f"/api/v1/classes/{test_class.id}", headers=auth_headers)
         assert response.status_code == 204
 
         # Verify enrollment was cascade-deleted

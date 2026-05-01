@@ -1,5 +1,7 @@
 import re
+
 from app.config import settings
+
 
 def validate_password(password: str) -> tuple[bool, str]:
     """Validate password meets security policy."""
@@ -11,9 +13,11 @@ def validate_password(password: str) -> tuple[bool, str]:
         return False, "La contrasena debe contener al menos un numero"
     return True, ""
 
+
 def validate_file_upload(filename: str, content_bytes: bytes) -> tuple[bool, str]:
     """Validate uploaded file by extension and magic bytes."""
     import os
+
     ext = os.path.splitext(filename)[1].lower() if filename else ""
     if ext not in settings.ALLOWED_UPLOAD_EXTENSIONS:
         return False, f"Tipo de archivo no permitido: {ext}"
@@ -30,7 +34,7 @@ def validate_file_upload(filename: str, content_bytes: bytes) -> tuple[bool, str
     }
 
     for magic, extensions in magic_bytes.items():
-        if content_bytes[:len(magic)] == magic:
+        if content_bytes[: len(magic)] == magic:
             if ext in extensions:
                 return True, ""
             return False, f"El contenido del archivo no coincide con la extension {ext}"

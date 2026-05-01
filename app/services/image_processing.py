@@ -118,9 +118,7 @@ def smart_crop(image_bytes: bytes) -> bytes:
             return _encode_png(warped)
 
     # --- Fallback: content-aware bounding box crop with generous padding ---
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 10
-    )
+    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 10)
     coords = cv2.findNonZero(thresh)
     if coords is not None and len(coords) > 100:
         x, y, bw, bh = cv2.boundingRect(coords)

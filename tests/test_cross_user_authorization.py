@@ -4,6 +4,7 @@ For every protected resource (project, class, exam, task, etc.), verify that
 user B cannot read, modify, or delete user A's data. This prevents future
 regressions from accidentally exposing data through new endpoints.
 """
+
 import io
 from uuid import uuid4
 

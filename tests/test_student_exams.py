@@ -243,7 +243,9 @@ class TestDuplicateExamPrevention:
     ) -> None:
         """The constraint is per-project, not global."""
         from uuid import uuid4
-        from app.models.project import Project as ProjectModel, ProjectStatus
+
+        from app.models.project import Project as ProjectModel
+        from app.models.project import ProjectStatus
 
         proj_a = ProjectModel(
             id=str(uuid4()),

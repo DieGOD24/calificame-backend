@@ -140,7 +140,7 @@ def _parse_rows(rows: list[list]) -> list[dict]:
         return []
 
     results: list[dict] = []
-    for row in rows[header_idx + 1:]:
+    for row in rows[header_idx + 1 :]:
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
         name = str(row[header_map["name"]] or "").strip() if header_map["name"] < len(row) else ""
@@ -162,11 +162,13 @@ def _parse_rows(rows: list[list]) -> list[dict]:
                     break
 
         if name and identifier:
-            results.append({
-                "student_name": name,
-                "student_identifier": identifier,
-                "student_email": email,
-            })
+            results.append(
+                {
+                    "student_name": name,
+                    "student_identifier": identifier,
+                    "student_email": email,
+                }
+            )
 
     return results
 

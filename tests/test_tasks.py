@@ -29,9 +29,7 @@ def _make_task(
 
 
 class TestListTasks:
-    def test_list_user_tasks(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_list_user_tasks(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         _make_task(db, test_user, task_type="grading")
         _make_task(db, test_user, task_type="ocr_extraction")
         response = client.get("/api/v1/tasks/", headers=auth_headers)
@@ -47,14 +45,10 @@ class TestListTasks:
         assert data["total"] == 0
         assert data["items"] == []
 
-    def test_filter_by_type(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_filter_by_type(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         _make_task(db, test_user, task_type="grading")
         _make_task(db, test_user, task_type="pdf_generation")
-        response = client.get(
-            "/api/v1/tasks/", headers=auth_headers, params={"task_type": "grading"}
-        )
+        response = client.get("/api/v1/tasks/", headers=auth_headers, params={"task_type": "grading"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
@@ -62,9 +56,7 @@ class TestListTasks:
 
 
 class TestGetTask:
-    def test_get_by_id(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_get_by_id(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         task = _make_task(db, test_user)
         response = client.get(f"/api/v1/tasks/{task.id}", headers=auth_headers)
         assert response.status_code == 200
@@ -88,9 +80,7 @@ class TestGetTask:
 
 
 class TestCancelTask:
-    def test_cancel_pending(
-        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_cancel_pending(self, client: TestClient, db: Session, test_user: User, auth_headers: dict) -> None:
         task = _make_task(db, test_user, task_status="pending")
         response = client.delete(f"/api/v1/tasks/{task.id}", headers=auth_headers)
         assert response.status_code == 204

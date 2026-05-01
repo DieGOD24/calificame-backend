@@ -277,9 +277,7 @@ def get_class_analytics(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     total_students = db.query(ClassEnrollment).filter(ClassEnrollment.class_id == class_id).count()
-    total_projects = (
-        db.query(ClassProject).filter(ClassProject.class_id == class_id).count()
-    )
+    total_projects = db.query(ClassProject).filter(ClassProject.class_id == class_id).count()
 
     # Single aggregate: total graded, avg percentage, pass count (>=60), without
     # loading any StudentExam rows into memory.

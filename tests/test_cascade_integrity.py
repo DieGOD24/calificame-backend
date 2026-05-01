@@ -4,7 +4,7 @@ When a project, class, or user is deleted, no orphaned child rows should
 remain. These tests guard against future schema changes that drop or
 forget cascade rules.
 """
-from datetime import UTC, datetime
+
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -15,7 +15,6 @@ from app.models.exam_answer import ExamAnswer
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
-from app.models.task_log import TaskLog
 from app.models.user import User
 
 
@@ -92,9 +91,7 @@ class TestProjectCascade:
         ans_id = ans.id
 
         # Delete via API
-        r = client.delete(
-            f"/api/v1/projects/{project_id}", headers=auth_headers
-        )
+        r = client.delete(f"/api/v1/projects/{project_id}", headers=auth_headers)
         assert r.status_code == 204
 
         # No orphans should remain
@@ -157,10 +154,7 @@ class TestClassCascade:
 
         db.expire_all()
         assert db.query(Class).filter(Class.id == class_id).first() is None
-        assert (
-            db.query(ClassEnrollment).filter(ClassEnrollment.id == enrollment_id).first()
-            is None
-        )
+        assert db.query(ClassEnrollment).filter(ClassEnrollment.id == enrollment_id).first() is None
         assert db.query(ClassProject).filter(ClassProject.id == cp_id).first() is None
         # The project itself should NOT be deleted (only the link)
         assert db.query(Project).filter(Project.id == project.id).first() is not None

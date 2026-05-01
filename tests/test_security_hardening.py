@@ -1,7 +1,6 @@
 """Security hardening tests: path traversal, oversized form fields, secret key validation."""
+
 import io
-import os
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient

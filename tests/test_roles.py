@@ -63,9 +63,7 @@ class TestDeveloperAccess:
         db.add(project)
         db.commit()
 
-        response = client.get(
-            f"/api/v1/projects/{project.id}", headers=auth_headers_developer
-        )
+        response = client.get(f"/api/v1/projects/{project.id}", headers=auth_headers_developer)
         assert response.status_code == 200
 
     def test_developer_can_delete_institution(
@@ -76,9 +74,7 @@ class TestDeveloperAccess:
         auth_headers_developer: dict,
     ) -> None:
         inst = _make_institution(db, test_developer_user, slug="dev-del")
-        response = client.delete(
-            f"/api/v1/institutions/{inst.id}", headers=auth_headers_developer
-        )
+        response = client.delete(f"/api/v1/institutions/{inst.id}", headers=auth_headers_developer)
         assert response.status_code == 204
 
 
@@ -115,16 +111,12 @@ class TestStudentRestrictions:
         auth_headers_student: dict,
     ) -> None:
         inst = _make_institution(db, test_admin_user, slug="stu-nodel")
-        response = client.delete(
-            f"/api/v1/institutions/{inst.id}", headers=auth_headers_student
-        )
+        response = client.delete(f"/api/v1/institutions/{inst.id}", headers=auth_headers_student)
         assert response.status_code == 403
 
 
 class TestProfessorAccess:
-    def test_professor_can_create_project(
-        self, client: TestClient, test_user: User, auth_headers: dict
-    ) -> None:
+    def test_professor_can_create_project(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
         response = client.post(
             "/api/v1/projects/",
             headers=auth_headers,
@@ -141,7 +133,5 @@ class TestProfessorAccess:
         auth_headers: dict,
     ) -> None:
         inst = _make_institution(db, test_admin_user, slug="prof-nodel")
-        response = client.delete(
-            f"/api/v1/institutions/{inst.id}", headers=auth_headers
-        )
+        response = client.delete(f"/api/v1/institutions/{inst.id}", headers=auth_headers)
         assert response.status_code == 403
