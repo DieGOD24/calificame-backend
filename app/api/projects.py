@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -89,19 +89,30 @@ def get_project(
 def update_project(
     project_data: ProjectUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
     project: Project = Depends(get_user_project),
 ) -> ProjectResponse:
-    """Update a project."""
+    """Update a project. `owner_id` is Developer/Admin-only (transfers ownership)."""
     update_data = project_data.model_dump(exclude_unset=True)
     if "config" in update_data and update_data["config"] is not None:
         update_data["config"] = project_data.config.model_dump() if project_data.config else None
+
+    if "owner_id" in update_data and update_data["owner_id"] != project.owner_id:
+        if current_user.role not in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only developers/admins can transfer project ownership",
+            )
+        new_owner = db.query(User).filter(User.id == update_data["owner_id"]).first()
+        if new_owner is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target owner not found")
 
     for field, value in update_data.items():
         setattr(project, field, value)
 
     db.commit()
     db.refresh(project)
-    logger.info("Project updated: '{}'", project.name)
+    logger.info("Project updated: '{}' (fields: {})", project.name, list(update_data.keys()))
     return _project_to_response(project)
 
 

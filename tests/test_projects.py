@@ -98,6 +98,48 @@ class TestUpdateProject:
         assert data["name"] == "Updated Name"
         assert data["description"] == "Updated description"
 
+    def test_owner_cannot_transfer(
+        self,
+        client: TestClient,
+        test_project: Project,
+        test_user_2,
+        auth_headers: dict,
+    ) -> None:
+        response = client.put(
+            f"/api/v1/projects/{test_project.id}",
+            headers=auth_headers,
+            json={"owner_id": test_user_2.id},
+        )
+        assert response.status_code == 403
+
+    def test_admin_transfers_ownership(
+        self,
+        client: TestClient,
+        test_project: Project,
+        test_user_2,
+        auth_headers_admin: dict,
+    ) -> None:
+        response = client.put(
+            f"/api/v1/projects/{test_project.id}",
+            headers=auth_headers_admin,
+            json={"owner_id": test_user_2.id},
+        )
+        assert response.status_code == 200
+        assert response.json()["owner_id"] == test_user_2.id
+
+    def test_admin_transfer_to_invalid_owner_404(
+        self,
+        client: TestClient,
+        test_project: Project,
+        auth_headers_admin: dict,
+    ) -> None:
+        response = client.put(
+            f"/api/v1/projects/{test_project.id}",
+            headers=auth_headers_admin,
+            json={"owner_id": "non-existent-id"},
+        )
+        assert response.status_code == 404
+
 
 class TestDeleteProject:
     def test_delete_project(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:

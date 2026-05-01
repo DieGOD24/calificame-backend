@@ -23,6 +23,8 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     subject: str | None = None
     config: ProjectConfig | None = None
+    # Admin-only: transfer the project to a different owner.
+    owner_id: str | None = None
 
 
 class ProjectOwner(BaseModel):

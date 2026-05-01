@@ -21,6 +21,9 @@ class ClassUpdate(BaseModel):
     description: str | None = None
     schedule: str | None = None
     is_active: bool | None = None
+    # Admin-only fields. Plain professors get 403 if they include these.
+    professor_id: str | None = None
+    institution_id: str | None = None
 
 
 class ClassResponse(BaseModel):

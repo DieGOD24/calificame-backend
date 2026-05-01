@@ -78,6 +78,65 @@ class UserRoleUpdate(BaseModel):
     role: str = Field(..., pattern="^(developer|admin|institution|professor|student)$")
 
 
+class AdminUserCreate(BaseModel):
+    """Schema used by Developer/Admin to create a user without going through the
+    public /auth/register flow (no rate limit, role is required, no defaults)."""
+
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: str = Field(..., min_length=1, max_length=255)
+    role: str = Field(..., pattern="^(developer|admin|institution|professor|student)$")
+    is_active: bool = True
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _strip_email(cls, v):
+        return _normalize_email(v) if isinstance(v, str) else v
+
+    @field_validator("full_name")
+    @classmethod
+    def _strip_name(cls, v):
+        v = _normalize_name(v)
+        if not v:
+            raise ValueError("full_name cannot be empty after trimming")
+        return v
+
+
+class AdminUserUpdate(BaseModel):
+    """Full PATCH for Developer/Admin: name, email, role, active flag."""
+
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    email: EmailStr | None = None
+    role: str | None = Field(default=None, pattern="^(developer|admin|institution|professor|student)$")
+    is_active: bool | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _strip_email(cls, v):
+        return _normalize_email(v) if isinstance(v, str) else v
+
+    @field_validator("full_name")
+    @classmethod
+    def _strip_name(cls, v):
+        if v is None:
+            return v
+        v = _normalize_name(v)
+        if not v:
+            raise ValueError("full_name cannot be empty after trimming")
+        return v
+
+
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class UserListResponse(BaseModel):
+    items: list["UserResponse"]
+    total: int
+    page: int
+    per_page: int
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
