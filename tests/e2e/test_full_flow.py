@@ -43,7 +43,7 @@ class TestCompleteGradingFlow:
 
         # ====== Step 3: Create project ======
         project_response = client.post(
-            "/api/v1/projects/",
+            "/api/v1/projects",
             headers=headers,
             json={
                 "name": "Algebra Mid-Term",
@@ -135,7 +135,7 @@ class TestCompleteGradingFlow:
         # ====== Step 6: Confirm questions (human in the loop) ======
         # First, list the questions
         questions_response = client.get(
-            f"/api/v1/projects/{project_id}/questions/",
+            f"/api/v1/projects/{project_id}/questions",
             headers=headers,
         )
         assert questions_response.status_code == 200
@@ -171,7 +171,7 @@ class TestCompleteGradingFlow:
             student_exam_ids.append(upload_resp.json()[0]["id"])
 
         # Verify exams listed
-        exams_list = client.get(f"/api/v1/projects/{project_id}/exams/", headers=headers)
+        exams_list = client.get(f"/api/v1/projects/{project_id}/exams", headers=headers)
         assert exams_list.json()["total"] == 2
 
         # ====== Step 8: Grade all exams (now returns TaskLog for background processing) ======

@@ -109,7 +109,7 @@ class TestGetAnswerKey:
         )
 
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/answer-key/",
+            f"/api/v1/projects/{test_project.id}/answer-key",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -123,7 +123,7 @@ class TestGetAnswerKey:
         auth_headers: dict,
     ) -> None:
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/answer-key/",
+            f"/api/v1/projects/{test_project.id}/answer-key",
             headers=auth_headers,
         )
         assert response.status_code == 404

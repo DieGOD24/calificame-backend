@@ -6,7 +6,7 @@ from app.models.project import Project
 class TestCreateProject:
     def test_create_project(self, client: TestClient, auth_headers: dict) -> None:
         response = client.post(
-            "/api/v1/projects/",
+            "/api/v1/projects",
             headers=auth_headers,
             json={
                 "name": "Math Final",
@@ -31,7 +31,7 @@ class TestCreateProject:
 
     def test_create_project_minimal(self, client: TestClient, auth_headers: dict) -> None:
         response = client.post(
-            "/api/v1/projects/",
+            "/api/v1/projects",
             headers=auth_headers,
             json={"name": "Quick Test"},
         )
@@ -42,7 +42,7 @@ class TestCreateProject:
 
     def test_create_project_unauthenticated(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/projects/",
+            "/api/v1/projects",
             json={"name": "No Auth"},
         )
         assert response.status_code == 401
@@ -50,7 +50,7 @@ class TestCreateProject:
 
 class TestListProjects:
     def test_list_projects(self, client: TestClient, test_project: Project, auth_headers: dict) -> None:
-        response = client.get("/api/v1/projects/", headers=auth_headers)
+        response = client.get("/api/v1/projects", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 1
@@ -58,7 +58,7 @@ class TestListProjects:
         assert data["items"][0]["id"] == test_project.id
 
     def test_list_projects_empty(self, client: TestClient, auth_headers: dict) -> None:
-        response = client.get("/api/v1/projects/", headers=auth_headers)
+        response = client.get("/api/v1/projects", headers=auth_headers)
         assert response.status_code == 200
         # The test_user fixture is used by auth_headers but no project fixture
         # so this depends on whether test_project is also loaded

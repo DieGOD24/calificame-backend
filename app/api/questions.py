@@ -15,7 +15,7 @@ from app.schemas.question import (
 router = APIRouter(prefix="/projects/{project_id}/questions", tags=["Questions"])
 
 
-@router.get("/", response_model=list[QuestionResponse])
+@router.get("", response_model=list[QuestionResponse])
 def list_questions(
     project_id: str,
     project: Project = Depends(get_user_project),

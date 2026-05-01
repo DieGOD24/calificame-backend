@@ -75,7 +75,7 @@ async def upload_answer_key(
     return answer_key
 
 
-@router.get("/", response_model=AnswerKeyResponse)
+@router.get("", response_model=AnswerKeyResponse)
 def get_answer_key(
     project_id: str,
     db: Session = Depends(get_db),

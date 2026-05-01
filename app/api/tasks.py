@@ -10,7 +10,7 @@ from app.schemas.task_log import TaskLogListResponse, TaskLogResponse
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
-@router.get("/", response_model=TaskLogListResponse)
+@router.get("", response_model=TaskLogListResponse)
 def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
