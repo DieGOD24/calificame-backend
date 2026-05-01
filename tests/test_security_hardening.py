@@ -24,7 +24,9 @@ class TestPathTraversal:
     def test_delete_rejects_traversal_path(self, tmp_path) -> None:
         storage = LocalStorageService(str(tmp_path / "uploads"))
         with pytest.raises(ValueError, match="traversal"):
-            storage.delete_file("..\\..\\windows\\system32\\config")
+            # Use forward slashes — backslashes are legal filename chars on Linux
+            # so they don't get interpreted as path separators by Path.resolve().
+            storage.delete_file("../../windows/system32/config")
 
     def test_normal_paths_still_work(self, tmp_path) -> None:
         """Defensive check: legitimate nested paths continue to work."""

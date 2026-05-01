@@ -41,6 +41,25 @@ def _setup_db() -> Generator[None, None, None]:
     Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def _stub_ai_enrollment_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the OpenAI-backed EnrollmentExtractionAgent with a no-op stub.
+
+    Tests that need real AI behavior should override this by re-patching the
+    agent inside the test. Default behavior: ``execute()`` returns ``[]`` so
+    the bulk-enroll endpoint falls through to the "no records" 400 error
+    path instead of hitting the OpenAI API with a fake key (and 502'ing).
+    """
+
+    class _StubAgent:
+        def execute(self, *_args: Any, **_kwargs: Any) -> list[Any]:
+            return []
+
+    # Force import so monkeypatch.setattr finds the attribute.
+    import app.agents.enrollment_extraction_agent as _agent_mod  # noqa: I001
+    monkeypatch.setattr(_agent_mod, "EnrollmentExtractionAgent", _StubAgent)
+
+
 @pytest.fixture()
 def db() -> Generator[Session, None, None]:
     """Provide a test database session."""

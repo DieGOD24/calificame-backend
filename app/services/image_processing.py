@@ -76,7 +76,7 @@ def smart_crop(image_bytes: bytes) -> bytes:
             best_area = area
 
     # Generous margin (% of detected dimensions) to avoid cutting border content
-    MARGIN_RATIO = 0.03  # 3% extra on each side
+    margin_ratio = 0.03  # 3% extra on each side
 
     if best_quad is not None:
         # Perspective transform to straighten the document
@@ -93,8 +93,8 @@ def smart_crop(image_bytes: bytes) -> bytes:
 
         if max_w > 100 and max_h > 100:
             # Expand the detected quad outward to keep margins safe
-            margin_w = max_w * MARGIN_RATIO
-            margin_h = max_h * MARGIN_RATIO
+            margin_w = max_w * margin_ratio
+            margin_h = max_h * margin_ratio
             center = rect.mean(axis=0)
             expanded = rect.copy()
             for i in range(4):
@@ -125,8 +125,8 @@ def smart_crop(image_bytes: bytes) -> bytes:
     if coords is not None and len(coords) > 100:
         x, y, bw, bh = cv2.boundingRect(coords)
         # Generous padding: 3% of image size on each side
-        pad_x = int(w * MARGIN_RATIO) + 20
-        pad_y = int(h * MARGIN_RATIO) + 20
+        pad_x = int(w * margin_ratio) + 20
+        pad_y = int(h * margin_ratio) + 20
         x = max(0, x - pad_x)
         y = max(0, y - pad_y)
         bw = min(w - x, bw + 2 * pad_x)

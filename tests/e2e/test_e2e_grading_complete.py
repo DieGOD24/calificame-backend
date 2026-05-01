@@ -105,7 +105,7 @@ class TestE2ECompleteGradingFlow:
         project_id = resp.json()["id"]
 
         # 4. Seed confirmed questions (skip OCR mocking; that's covered elsewhere)
-        questions = _seed_questions(db, project_id, count=3)
+        _seed_questions(db, project_id, count=3)
 
         # Mark project as confirmed
         from app.models.project import Project

@@ -19,7 +19,7 @@ def validate_file_upload(filename: str, content_bytes: bytes) -> tuple[bool, str
         return False, f"Tipo de archivo no permitido: {ext}"
 
     # Check magic bytes
-    MAGIC_BYTES = {
+    magic_bytes = {
         b"%PDF": [".pdf"],
         b"\x89PNG": [".png"],
         b"\xff\xd8\xff": [".jpg", ".jpeg"],
@@ -29,7 +29,7 @@ def validate_file_upload(filename: str, content_bytes: bytes) -> tuple[bool, str
         b"MM\x00\x2a": [".tiff"],
     }
 
-    for magic, extensions in MAGIC_BYTES.items():
+    for magic, extensions in magic_bytes.items():
         if content_bytes[:len(magic)] == magic:
             if ext in extensions:
                 return True, ""
