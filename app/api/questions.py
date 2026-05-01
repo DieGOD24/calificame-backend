@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -19,9 +19,20 @@ router = APIRouter(prefix="/projects/{project_id}/questions", tags=["Questions"]
 def list_questions(
     project_id: str,
     project: Project = Depends(get_user_project),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=200, description="Items per page"),
+    db: Session = Depends(get_db),
 ) -> list:
-    """List all questions for a project."""
-    return project.questions
+    """List all questions for a project with pagination."""
+    offset = (page - 1) * page_size
+    return (
+        db.query(Question)
+        .filter(Question.project_id == project_id)
+        .order_by(Question.question_number)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
 
 
 @router.put("/{question_id}", response_model=QuestionResponse)

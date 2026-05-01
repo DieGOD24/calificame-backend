@@ -107,7 +107,7 @@ class TestListStudentExams:
             )
 
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/exams",
+            f"/api/v1/projects/{test_project.id}/exams/",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -123,7 +123,7 @@ class TestListStudentExams:
         auth_headers: dict,
     ) -> None:
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/exams",
+            f"/api/v1/projects/{test_project.id}/exams/",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -186,3 +186,89 @@ class TestDeleteStudentExam:
             headers=auth_headers,
         )
         assert response.status_code == 404
+
+
+class TestDuplicateExamPrevention:
+    def test_uploading_same_identifier_twice_returns_409(
+        self,
+        client: TestClient,
+        test_project: Project,
+        auth_headers: dict,
+        temp_storage: LocalStorageService,
+    ) -> None:
+        """Uploading two exams for the same student in a project must be rejected."""
+        url = f"/api/v1/projects/{test_project.id}/exams/upload"
+
+        first = client.post(
+            url,
+            headers=auth_headers,
+            files={"files": ("s1.pdf", io.BytesIO(b"%PDF-1.4 first"), "application/pdf")},
+            data={"student_name": "Ana Maria", "student_identifier": "STU-001"},
+        )
+        assert first.status_code == 201
+
+        second = client.post(
+            url,
+            headers=auth_headers,
+            files={"files": ("s2.pdf", io.BytesIO(b"%PDF-1.4 second"), "application/pdf")},
+            data={"student_name": "Ana Maria", "student_identifier": "STU-001"},
+        )
+        assert second.status_code == 409
+        assert "STU-001" in second.json()["detail"]
+
+    def test_anonymous_uploads_can_repeat(
+        self,
+        client: TestClient,
+        test_project: Project,
+        auth_headers: dict,
+        temp_storage: LocalStorageService,
+    ) -> None:
+        """Without student_identifier, multiple uploads stay allowed."""
+        url = f"/api/v1/projects/{test_project.id}/exams/upload"
+        for i in range(3):
+            r = client.post(
+                url,
+                headers=auth_headers,
+                files={"files": (f"s{i}.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
+            )
+            assert r.status_code == 201
+
+    def test_different_projects_can_share_identifier(
+        self,
+        client: TestClient,
+        db,
+        test_user,
+        auth_headers: dict,
+        temp_storage: LocalStorageService,
+    ) -> None:
+        """The constraint is per-project, not global."""
+        from uuid import uuid4
+
+        from app.models.project import Project as ProjectModel
+        from app.models.project import ProjectStatus
+
+        proj_a = ProjectModel(
+            id=str(uuid4()),
+            owner_id=test_user.id,
+            name="Proj A",
+            status=ProjectStatus.DRAFT.value,
+            config={},
+        )
+        proj_b = ProjectModel(
+            id=str(uuid4()),
+            owner_id=test_user.id,
+            name="Proj B",
+            status=ProjectStatus.DRAFT.value,
+            config={},
+        )
+        db.add_all([proj_a, proj_b])
+        db.commit()
+
+        for proj in (proj_a, proj_b):
+            r = client.post(
+                f"/api/v1/projects/{proj.id}/exams/upload",
+                headers=auth_headers,
+                files={"files": ("s.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
+                data={"student_name": "Same Person", "student_identifier": "X-1"},
+            )
+            assert r.status_code == 201, f"Project {proj.name}: {r.text}"

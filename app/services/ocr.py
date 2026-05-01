@@ -28,7 +28,7 @@ class OCRService:
             media_type = "image/png"
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=settings.AI_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -91,7 +91,7 @@ class OCRService:
         )
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=settings.AI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Extract questions and answers from:\n\n{text}"},

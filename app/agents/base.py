@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI, RateLimitError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.config import settings
 
@@ -17,10 +18,15 @@ class BaseAgent(ABC):
         """Execute the agent's task."""
         ...
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type((APITimeoutError, APIConnectionError, RateLimitError)),
+    )
     def _chat_completion(
         self,
         messages: list[dict],
-        model: str = "gpt-4o",
+        model: str = settings.AI_MODEL,
         max_tokens: int = 4096,
         temperature: float = 0.0,
     ) -> str:
@@ -60,12 +66,17 @@ class BaseAgent(ABC):
             # If PIL can't open it, assume PNG and let OpenAI reject if invalid
             return img_bytes, "image/png"
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type((APITimeoutError, APIConnectionError, RateLimitError)),
+    )
     def _chat_completion_with_images(
         self,
         system_prompt: str,
         user_text: str,
         images: list[bytes],
-        model: str = "gpt-4o",
+        model: str = settings.AI_MODEL,
         max_tokens: int = 16384,
         temperature: float = 0.0,
     ) -> str:

@@ -1,17 +1,20 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from loguru import logger
+from openai import AuthenticationError as OpenAIAuthError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, get_user_project
+from app.config import settings
 from app.database import SessionLocal
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.student_exam import StudentExam
 from app.models.task_log import TaskLog
 from app.models.user import User
+from app.rate_limit import limiter
 from app.schemas.grading import GradingSummary
 from app.schemas.student_exam import (
     ExamAnswerResponse,
@@ -53,9 +56,9 @@ def _run_grade_all_background(task_id: str, project_id: str, regrade: bool) -> N
         )
 
         if regrade:
-            statuses = ["uploaded", "error", "graded"]
+            statuses = ["uploaded", "error", "graded", "processing"]
         else:
-            statuses = ["uploaded", "error"]
+            statuses = ["uploaded", "error", "processing"]
 
         student_exams = (
             db.query(StudentExam)
@@ -91,6 +94,17 @@ def _run_grade_all_background(task_id: str, project_id: str, regrade: bool) -> N
                 grading_service.grade_exam(db, exam, questions)
                 graded_count += 1
                 logger.info("Graded exam {}/{} for project {}", i + 1, total, project_id)
+            except OpenAIAuthError as auth_err:
+                logger.error("OpenAI auth error grading project {}: {}", project_id, auth_err)
+                exam.status = "error"
+                exam.error_message = "OpenAI API key is invalid or not configured."
+                task.status = "failed"
+                task.error_message = (
+                    "OpenAI API key is invalid or not configured. Configure a valid key to grade exams."
+                )
+                task.completed_at = datetime.now(UTC)
+                db.commit()
+                return
             except Exception as e:
                 logger.error("Error grading exam {}: {}", exam.id, str(e))
 
@@ -125,7 +139,9 @@ def _run_grade_all_background(task_id: str, project_id: str, regrade: bool) -> N
 
 
 @router.post("/grade/{exam_id}", response_model=GradingResultResponse)
+@limiter.limit(settings.RATE_LIMIT_AI)
 def grade_single_exam(
+    request: Request,
     project_id: str,
     exam_id: str,
     db: Session = Depends(get_db),
@@ -133,6 +149,12 @@ def grade_single_exam(
     project: Project = Depends(get_user_project),
 ) -> dict:
     """Grade a single student exam."""
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OpenAI API key is not configured. AI grading is unavailable.",
+        )
+
     confirmed_questions = (
         db.query(Question)
         .filter(Question.project_id == project_id, Question.is_confirmed.is_(True))
@@ -151,7 +173,19 @@ def grade_single_exam(
 
     logger.info("Grading single exam {} for project {} by {}", exam_id, project_id, current_user.email)
     grading_service = GradingService()
-    graded_exam = grading_service.grade_exam(db, exam, confirmed_questions)
+    try:
+        graded_exam = grading_service.grade_exam(db, exam, confirmed_questions)
+    except OpenAIAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service unavailable: OpenAI API key is not configured. Contact the administrator.",
+        )
+    except Exception as exc:
+        logger.error("Grading failed for exam {}: {}", exam_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to grade exam. Please try again later.",
+        )
 
     answers = []
     for a in graded_exam.answers:
@@ -178,7 +212,9 @@ def grade_single_exam(
 
 
 @router.post("/grade-all", response_model=TaskLogResponse)
+@limiter.limit(settings.RATE_LIMIT_AI)
 def grade_all_exams(
+    request: Request,
     project_id: str,
     background_tasks: BackgroundTasks,
     regrade: bool = Query(False, description="Re-grade already graded exams too"),
@@ -187,6 +223,12 @@ def grade_all_exams(
     project: Project = Depends(get_user_project),
 ) -> TaskLog:
     """Grade all student exams in background. Returns a task to poll for progress."""
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OpenAI API key is not configured. AI grading is unavailable.",
+        )
+
     confirmed_count = (
         db.query(Question).filter(Question.project_id == project_id, Question.is_confirmed.is_(True)).count()
     )
@@ -194,6 +236,22 @@ def grade_all_exams(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No confirmed questions. Please confirm the answer key first.",
+        )
+
+    # Prevent concurrent grade-all on the same project
+    active = (
+        db.query(TaskLog)
+        .filter(
+            TaskLog.project_id == project_id,
+            TaskLog.task_type == "grading",
+            TaskLog.status.in_(["pending", "processing"]),
+        )
+        .first()
+    )
+    if active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya hay una calificacion en curso para este proyecto. Espera a que termine.",
         )
 
     task = TaskLog(
@@ -213,6 +271,36 @@ def grade_all_exams(
     background_tasks.add_task(_run_grade_all_background, task.id, project_id, regrade)
 
     return task
+
+
+@router.post("/reset-stuck")
+def reset_stuck_exams(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    project: Project = Depends(get_user_project),
+) -> dict:
+    """Reset exams stuck in 'processing' back to 'uploaded' so they can be re-graded."""
+    stuck = (
+        db.query(StudentExam)
+        .filter(
+            StudentExam.project_id == project_id,
+            StudentExam.status == "processing",
+        )
+        .all()
+    )
+    for exam in stuck:
+        exam.status = "uploaded"
+        exam.error_message = None
+    if stuck:
+        db.commit()
+        logger.info(
+            "Reset {} stuck exams for project {} by {}",
+            len(stuck),
+            project_id,
+            current_user.email,
+        )
+    return {"reset": len(stuck)}
 
 
 @router.get("/summary", response_model=GradingSummary)

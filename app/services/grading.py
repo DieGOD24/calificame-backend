@@ -94,10 +94,25 @@ class GradingService:
 
         except Exception as e:
             logger.error("Error grading exam {}: {}", student_exam.id, str(e))
-            student_exam.status = "error"
-            student_exam.error_message = str(e)
-            db.commit()
-            db.refresh(student_exam)
+            # Roll back any partial answer inserts so the DB stays consistent
+            try:
+                db.rollback()
+            except Exception as rb_err:
+                logger.error("Rollback failed for exam {}: {}", student_exam.id, rb_err)
+
+            # Re-fetch the exam so we have a clean attached instance after rollback
+            try:
+                fresh = db.query(StudentExam).filter(StudentExam.id == student_exam.id).first()
+                if fresh is not None:
+                    fresh.status = "error"
+                    fresh.error_message = str(e)[:500]
+                    db.commit()
+                    db.refresh(fresh)
+                    return fresh
+            except Exception as set_err:
+                # Last-resort: commit failed; leave exam recoverable on next startup
+                logger.error("Could not mark exam {} as error: {}", student_exam.id, set_err)
+                db.rollback()
 
         return student_exam
 

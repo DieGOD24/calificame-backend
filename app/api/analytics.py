@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
+from app.models.clase import Class, ClassEnrollment, ClassProject
 from app.models.exam_answer import ExamAnswer
 from app.models.institution import Institution, InstitutionMember
 from app.models.project import Project
@@ -10,6 +12,7 @@ from app.models.question import Question
 from app.models.student_exam import StudentExam
 from app.models.user import User, UserRole
 from app.schemas.analytics import (
+    ClassAnalytics,
     InstitutionAnalytics,
     ProjectAnalytics,
     QuestionDifficulty,
@@ -99,14 +102,27 @@ def get_project_analytics(
             count = sum(1 for p in percentages if low <= p < high)
         score_distribution.append(ScoreDistribution(range_label=label, count=count))
 
-    # Question difficulty
+    # Question difficulty — single aggregate query instead of N+1
     questions = db.query(Question).filter(Question.project_id == project_id).order_by(Question.question_number).all()
+
+    question_ids = [q.id for q in questions]
+    counts_by_qid: dict[str, tuple[int, int]] = {}
+    if question_ids:
+        rows = (
+            db.query(
+                ExamAnswer.question_id,
+                func.count(ExamAnswer.id).label("total"),
+                func.sum(case((ExamAnswer.is_correct.is_(True), 1), else_=0)).label("correct"),
+            )
+            .filter(ExamAnswer.question_id.in_(question_ids))
+            .group_by(ExamAnswer.question_id)
+            .all()
+        )
+        counts_by_qid = {r.question_id: (int(r.total or 0), int(r.correct or 0)) for r in rows}
 
     question_difficulty = []
     for q in questions:
-        answers = db.query(ExamAnswer).filter(ExamAnswer.question_id == q.id).all()
-        total_count = len(answers)
-        correct_count = sum(1 for a in answers if a.is_correct)
+        total_count, correct_count = counts_by_qid.get(q.id, (0, 0))
         success_rate = (correct_count / total_count * 100) if total_count > 0 else 0.0
         question_difficulty.append(
             QuestionDifficulty(
@@ -211,21 +227,25 @@ def get_institution_analytics(
     # Count projects owned by members
     total_projects = (db.query(Project).filter(Project.owner_id.in_(member_user_ids)).count()) if member_user_ids else 0
 
-    # Count graded exams across member projects
-    graded_exams_query = (
-        db.query(StudentExam)
-        .join(Project, StudentExam.project_id == Project.id)
-        .filter(
-            Project.owner_id.in_(member_user_ids),
-            StudentExam.status == "graded",
+    # Aggregate graded exam stats in a single SQL query (no row hydration)
+    if member_user_ids:
+        agg_row = (
+            db.query(
+                func.count(StudentExam.id).label("total"),
+                func.avg(StudentExam.grade_percentage).label("avg_pct"),
+            )
+            .join(Project, StudentExam.project_id == Project.id)
+            .filter(
+                Project.owner_id.in_(member_user_ids),
+                StudentExam.status == "graded",
+            )
+            .first()
         )
-    )
-    graded_exams = graded_exams_query.all() if member_user_ids else []
-    total_exams_graded = len(graded_exams)
-
-    # Average score percentage
-    percentages = [e.grade_percentage for e in graded_exams if e.grade_percentage is not None]
-    average_score_percentage = round(sum(percentages) / len(percentages), 2) if percentages else None
+        total_exams_graded = int(agg_row.total or 0)
+        average_score_percentage = round(float(agg_row.avg_pct), 2) if agg_row.avg_pct is not None else None
+    else:
+        total_exams_graded = 0
+        average_score_percentage = None
 
     logger.info(f"Generated analytics for institution {institution_id}")
 
@@ -237,4 +257,59 @@ def get_institution_analytics(
         total_projects=total_projects,
         total_exams_graded=total_exams_graded,
         average_score_percentage=average_score_percentage,
+    )
+
+
+@router.get("/classes/{class_id}", response_model=ClassAnalytics)
+def get_class_analytics(
+    class_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ClassAnalytics:
+    """Get analytics for a class."""
+    clase = db.query(Class).filter(Class.id == class_id).first()
+    if clase is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    # Authorization
+    if current_user.role not in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
+        if clase.professor_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    total_students = db.query(ClassEnrollment).filter(ClassEnrollment.class_id == class_id).count()
+    total_projects = db.query(ClassProject).filter(ClassProject.class_id == class_id).count()
+
+    # Single aggregate: total graded, avg percentage, pass count (>=60), without
+    # loading any StudentExam rows into memory.
+    agg = (
+        db.query(
+            func.count(StudentExam.id).label("total"),
+            func.avg(StudentExam.grade_percentage).label("avg_pct"),
+            func.sum(case((StudentExam.grade_percentage >= 60.0, 1), else_=0)).label("pass_count"),
+            func.sum(case((StudentExam.grade_percentage.is_not(None), 1), else_=0)).label("with_pct"),
+        )
+        .join(ClassProject, ClassProject.project_id == StudentExam.project_id)
+        .filter(
+            ClassProject.class_id == class_id,
+            StudentExam.status == "graded",
+        )
+        .first()
+    )
+    total_exams_graded = int(agg.total or 0)
+    average_score_percentage = round(float(agg.avg_pct), 2) if agg.avg_pct is not None else None
+    with_pct = int(agg.with_pct or 0)
+    pass_count = int(agg.pass_count or 0)
+    pass_rate = round(pass_count / with_pct * 100, 2) if with_pct else None
+
+    logger.info(f"Generated analytics for class {class_id}")
+
+    return ClassAnalytics(
+        class_id=clase.id,
+        class_name=clase.name,
+        semester=clase.semester,
+        total_students=total_students,
+        total_projects=total_projects,
+        total_exams_graded=total_exams_graded,
+        average_score_percentage=average_score_percentage,
+        pass_rate=pass_rate,
     )

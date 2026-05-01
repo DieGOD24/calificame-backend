@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, String, Text, func
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -25,3 +25,10 @@ class TaskLog(Base):
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
 
     user = relationship("User", back_populates="task_logs")
+
+    __table_args__ = (
+        # Composite index for the concurrent-grading check (project_id + status filter)
+        Index("ix_task_logs_project_status", "project_id", "status"),
+        # Index for listing user's tasks by type
+        Index("ix_task_logs_user_type", "user_id", "task_type"),
+    )

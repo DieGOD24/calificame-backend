@@ -30,3 +30,5 @@ class User(Base):
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
     institution_memberships = relationship("InstitutionMember", back_populates="user", cascade="all, delete-orphan")
     task_logs = relationship("TaskLog", back_populates="user", cascade="all, delete-orphan")
+    classes = relationship("Class", back_populates="professor", cascade="all, delete-orphan")
+    class_enrollments = relationship("ClassEnrollment", back_populates="user")

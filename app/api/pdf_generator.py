@@ -4,7 +4,7 @@ import os
 import tempfile
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from fpdf import FPDF
 from loguru import logger
@@ -12,35 +12,18 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
+from app.config import settings
 from app.models.task_log import TaskLog
 from app.models.user import User
+from app.rate_limit import limiter
+from app.services.image_processing import process_image
 
 router = APIRouter(prefix="/pdf-generator", tags=["PDF Generator"])
 
-
-def auto_detect_crop(image_bytes: bytes) -> dict:
-    """Detect document edges in an image and return crop coordinates."""
-    img = Image.open(io.BytesIO(image_bytes))
-    gray = img.convert("L")
-    threshold = 240
-    pixels = gray.load()
-    w, h = gray.size
-    min_x, min_y, max_x, max_y = w, h, 0, 0
-    for y_pos in range(h):
-        for x_pos in range(w):
-            if pixels[x_pos, y_pos] < threshold:
-                min_x = min(min_x, x_pos)
-                min_y = min(min_y, y_pos)
-                max_x = max(max_x, x_pos)
-                max_y = max(max_y, y_pos)
-    padding = 10
-    min_x = max(0, min_x - padding)
-    min_y = max(0, min_y - padding)
-    max_x = min(w, max_x + padding)
-    max_y = min(h, max_y + padding)
-    if max_x <= min_x or max_y <= min_y:
-        return {"x": 0, "y": 0, "width": w, "height": h}
-    return {"x": min_x, "y": min_y, "width": max_x - min_x, "height": max_y - min_y}
+# Image processing constants
+DEFAULT_DPI = 96
+A4_WIDTH_MM = 210
+A4_HEIGHT_MM = 297
 
 
 def generate_pdf_from_images(image_bytes_list: list[bytes]) -> bytes:
@@ -48,11 +31,10 @@ def generate_pdf_from_images(image_bytes_list: list[bytes]) -> bytes:
     pdf = FPDF()
     for img_bytes in image_bytes_list:
         img = Image.open(io.BytesIO(img_bytes))
-        w_mm = img.width * 25.4 / 96  # assume 96 DPI
-        h_mm = img.height * 25.4 / 96
+        w_mm = img.width * 25.4 / DEFAULT_DPI
+        h_mm = img.height * 25.4 / DEFAULT_DPI
         # Fit to A4
-        a4_w, a4_h = 210, 297
-        scale = min(a4_w / w_mm, a4_h / h_mm, 1.0)
+        scale = min(A4_WIDTH_MM / w_mm, A4_HEIGHT_MM / h_mm, 1.0)
         final_w = w_mm * scale
         final_h = h_mm * scale
         pdf.add_page(orientation="P" if final_h >= final_w else "L")
@@ -61,8 +43,8 @@ def generate_pdf_from_images(image_bytes_list: list[bytes]) -> bytes:
             img.save(tmp, format="PNG")
             tmp_path = tmp.name
         try:
-            page_w = a4_w if final_h >= final_w else a4_h
-            page_h = a4_h if final_h >= final_w else a4_w
+            page_w = A4_WIDTH_MM if final_h >= final_w else A4_HEIGHT_MM
+            page_h = A4_HEIGHT_MM if final_h >= final_w else A4_WIDTH_MM
             x = (page_w - final_w) / 2
             y = (page_h - final_h) / 2
             pdf.image(tmp_path, x=x, y=y, w=final_w, h=final_h)
@@ -72,41 +54,32 @@ def generate_pdf_from_images(image_bytes_list: list[bytes]) -> bytes:
 
 
 @router.post("/analyze")
+@limiter.limit(settings.RATE_LIMIT_UPLOAD)
 async def analyze_images(
-    images: list[UploadFile],
+    request: Request,
+    files: list[UploadFile],
     current_user: User = Depends(get_current_active_user),
 ) -> list[dict]:
-    """Receive uploaded images and return auto-detected crop coordinates for each."""
-    if not images:
+    """Receive uploaded images and return processed (cropped + enhanced) previews."""
+    if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No images provided")
 
     results = []
-    for index, upload in enumerate(images):
+    for index, upload in enumerate(files):
         try:
             image_bytes = await upload.read()
-            img = Image.open(io.BytesIO(image_bytes))
-            crop_box = auto_detect_crop(image_bytes)
+            original = Image.open(io.BytesIO(image_bytes))
 
-            # Crop the image and encode as base64
-            cropped = img.crop(
-                (
-                    crop_box["x"],
-                    crop_box["y"],
-                    crop_box["x"] + crop_box["width"],
-                    crop_box["y"] + crop_box["height"],
-                )
-            )
-            buffer = io.BytesIO()
-            cropped.save(buffer, format="PNG")
-            cropped_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            # Smart crop + text enhancement
+            processed_bytes = process_image(image_bytes)
+            processed_b64 = base64.b64encode(processed_bytes).decode("utf-8")
 
             results.append(
                 {
                     "index": index,
-                    "original_width": img.width,
-                    "original_height": img.height,
-                    "crop_box": crop_box,
-                    "cropped_image_base64": cropped_b64,
+                    "original_width": original.width,
+                    "original_height": original.height,
+                    "processed_image_base64": processed_b64,
                 }
             )
         except Exception as e:
@@ -116,13 +89,13 @@ async def analyze_images(
                 detail=f"Failed to process image at index {index}: {str(e)}",
             )
 
-    logger.info(f"User {current_user.id} analyzed {len(results)} images for cropping")
+    logger.info(f"User {current_user.id} analyzed {len(results)} images (smart crop + enhance)")
     return results
 
 
 @router.post("/crop")
 async def crop_image(
-    image: UploadFile,
+    file: UploadFile,
     x: int = Query(..., ge=0),
     y: int = Query(..., ge=0),
     width: int = Query(..., gt=0),
@@ -131,7 +104,7 @@ async def crop_image(
 ) -> dict:
     """Crop an image with the given coordinates and return as base64."""
     try:
-        image_bytes = await image.read()
+        image_bytes = await file.read()
         img = Image.open(io.BytesIO(image_bytes))
 
         # Validate crop coordinates
@@ -159,18 +132,26 @@ async def crop_image(
 
 
 @router.post("/generate")
+@limiter.limit(settings.RATE_LIMIT_UPLOAD)
 async def generate_pdf(
-    images: list[UploadFile],
+    request: Request,
+    files: list[UploadFile],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> StreamingResponse:
-    """Generate a PDF from ordered images. Each image becomes a page."""
-    if not images:
+    """Generate a PDF from ordered images. Each image becomes a page.
+
+    Images are inserted as received: the frontend already sends the
+    processed PNGs returned by ``/analyze``, so re-running the pipeline
+    here would apply smart-crop + text enhancement twice and the PDF
+    would no longer match the preview the user accepted.
+    """
+    if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No images provided")
 
     try:
         image_bytes_list = []
-        for upload in images:
+        for upload in files:
             img_bytes = await upload.read()
             image_bytes_list.append(img_bytes)
 

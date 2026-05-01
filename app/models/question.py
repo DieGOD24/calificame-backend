@@ -10,7 +10,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
     question_number = Column(Integer, nullable=False)
     question_text = Column(Text)
     correct_answer = Column(Text, nullable=False)
