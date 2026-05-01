@@ -74,7 +74,7 @@ async def upload_student_exams(
     return created
 
 
-@router.get("/", response_model=StudentExamListResponse)
+@router.get("", response_model=StudentExamListResponse)
 def list_student_exams(
     project_id: str,
     db: Session = Depends(get_db),

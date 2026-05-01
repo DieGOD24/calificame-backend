@@ -107,7 +107,7 @@ class TestListStudentExams:
             )
 
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/exams/",
+            f"/api/v1/projects/{test_project.id}/exams",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -123,7 +123,7 @@ class TestListStudentExams:
         auth_headers: dict,
     ) -> None:
         response = client.get(
-            f"/api/v1/projects/{test_project.id}/exams/",
+            f"/api/v1/projects/{test_project.id}/exams",
             headers=auth_headers,
         )
         assert response.status_code == 200

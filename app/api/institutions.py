@@ -52,7 +52,7 @@ def _is_institution_admin(db: Session, institution_id: str, user: User) -> bool:
     return member is not None
 
 
-@router.post("/", response_model=InstitutionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=InstitutionResponse, status_code=status.HTTP_201_CREATED)
 def create_institution(
     data: InstitutionCreate,
     db: Session = Depends(get_db),
@@ -90,7 +90,7 @@ def create_institution(
     return _institution_to_response(institution)
 
 
-@router.get("/", response_model=list[InstitutionResponse])
+@router.get("", response_model=list[InstitutionResponse])
 def list_institutions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
