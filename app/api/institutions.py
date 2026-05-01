@@ -15,6 +15,7 @@ from app.schemas.institution import (
     InstitutionResponse,
     InstitutionUpdate,
     InviteMemberRequest,
+    MemberRoleUpdate,
 )
 
 router = APIRouter(prefix="/institutions", tags=["Institutions"])
@@ -336,6 +337,72 @@ def accept_invitation(
         joined_at=member.joined_at,
         user_email=current_user.email,
         user_name=current_user.full_name or "",
+    )
+
+
+@router.patch("/{institution_id}/members/{member_id}", response_model=InstitutionMemberResponse)
+def update_member_role(
+    institution_id: str,
+    member_id: str,
+    data: MemberRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InstitutionMemberResponse:
+    """Change a member's role inside an institution.
+
+    Only Developer/Admin or institution owners/admins can do this. Demoting
+    the last owner is blocked to avoid orphaning the institution.
+    """
+    member = (
+        db.query(InstitutionMember)
+        .filter(
+            InstitutionMember.id == member_id,
+            InstitutionMember.institution_id == institution_id,
+        )
+        .first()
+    )
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    if not _is_institution_admin(db, institution_id, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to change member roles")
+
+    if member.role == "owner" and data.role != "owner":
+        other_owners = (
+            db.query(InstitutionMember)
+            .filter(
+                InstitutionMember.institution_id == institution_id,
+                InstitutionMember.role == "owner",
+                InstitutionMember.id != member.id,
+            )
+            .count()
+        )
+        if other_owners == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot demote the last owner of the institution",
+            )
+
+    member.role = data.role
+    db.commit()
+    db.refresh(member)
+
+    user = db.query(User).filter(User.id == member.user_id).first()
+    logger.info(
+        "Member role changed: institution={} member={} new_role={} (by {})",
+        institution_id,
+        member_id,
+        data.role,
+        current_user.email,
+    )
+    return InstitutionMemberResponse(
+        id=member.id,
+        user_id=member.user_id,
+        institution_id=member.institution_id,
+        role=member.role,
+        joined_at=member.joined_at,
+        user_email=user.email if user else "",
+        user_name=user.full_name if user and user.full_name else "",
     )
 
 

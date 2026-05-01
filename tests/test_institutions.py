@@ -220,3 +220,55 @@ class TestMembers:
             headers=auth_headers_admin,
         )
         assert response.status_code == 204
+
+    def test_update_member_role(
+        self,
+        client: TestClient,
+        db: Session,
+        test_admin_user: User,
+        test_user: User,
+        auth_headers_admin: dict,
+    ) -> None:
+        inst = _make_institution(db, test_admin_user, slug="role-up")
+        member = InstitutionMember(
+            id=str(uuid4()),
+            user_id=test_user.id,
+            institution_id=inst.id,
+            role="professor",
+        )
+        db.add(member)
+        db.commit()
+        db.refresh(member)
+
+        response = client.patch(
+            f"/api/v1/institutions/{inst.id}/members/{member.id}",
+            headers=auth_headers_admin,
+            json={"role": "admin"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["role"] == "admin"
+
+    def test_cannot_demote_last_owner(
+        self,
+        client: TestClient,
+        db: Session,
+        test_admin_user: User,
+        auth_headers_admin: dict,
+    ) -> None:
+        inst = _make_institution(db, test_admin_user, slug="last-owner")
+        owner_member = (
+            db.query(InstitutionMember)
+            .filter(
+                InstitutionMember.institution_id == inst.id,
+                InstitutionMember.role == "owner",
+            )
+            .first()
+        )
+        assert owner_member is not None
+
+        response = client.patch(
+            f"/api/v1/institutions/{inst.id}/members/{owner_member.id}",
+            headers=auth_headers_admin,
+            json={"role": "admin"},
+        )
+        assert response.status_code == 400

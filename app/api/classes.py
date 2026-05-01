@@ -172,18 +172,53 @@ def update_class(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ClassResponse:
-    """Update a class."""
+    """Update a class.
+
+    `professor_id` and `institution_id` can only be changed by Developer/Admin
+    (acts as a transfer/reassignment). Other fields follow the usual ownership
+    rules.
+    """
     clase = _get_class_or_404(db, class_id)
     _check_class_owner(clase, current_user)
 
     update_data = data.model_dump(exclude_unset=True)
+
+    is_admin = current_user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value)
+    admin_only = {"professor_id", "institution_id"}
+    if not is_admin and any(k in update_data for k in admin_only):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only developers/admins can change professor_id or institution_id",
+        )
+
+    if "professor_id" in update_data and update_data["professor_id"] != clase.professor_id:
+        new_prof = db.query(User).filter(User.id == update_data["professor_id"]).first()
+        if new_prof is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target professor not found")
+        if new_prof.role not in (
+            UserRole.PROFESSOR.value,
+            UserRole.ADMIN.value,
+            UserRole.DEVELOPER.value,
+            UserRole.INSTITUTION.value,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Target user must have a teaching role (professor/admin/developer/institution)",
+            )
+
+    if "institution_id" in update_data and update_data["institution_id"]:
+        from app.models.institution import Institution
+
+        if not db.query(Institution).filter(Institution.id == update_data["institution_id"]).first():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target institution not found")
+
     for field, value in update_data.items():
         setattr(clase, field, value)
 
     db.commit()
     db.refresh(clase)
 
-    logger.info(f"User {current_user.id} updated class {class_id}")
+    logger.info(f"User {current_user.id} updated class {class_id} (fields: {list(update_data.keys())})")
     return _class_to_response(clase)
 
 

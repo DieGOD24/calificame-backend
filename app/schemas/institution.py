@@ -49,6 +49,10 @@ class InviteMemberRequest(BaseModel):
     role: str = Field(default="professor", pattern="^(admin|professor|student)$")
 
 
+class MemberRoleUpdate(BaseModel):
+    role: str = Field(..., pattern="^(owner|admin|professor|student)$")
+
+
 class InstitutionInvitationResponse(BaseModel):
     id: str
     email: str
