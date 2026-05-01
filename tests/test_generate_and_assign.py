@@ -108,9 +108,7 @@ class TestHappyPath:
         exam_id = response.json()["id"]
         assert stub_grading_service == [exam_id]
 
-        listed = client.get(
-            f"/api/v1/projects/{project.id}/exams/", headers=auth_headers
-        ).json()
+        listed = client.get(f"/api/v1/projects/{project.id}/exams/", headers=auth_headers).json()
         assert listed["graded_count"] == 1
         assert listed["items"][0]["status"] == "graded"
 
@@ -241,9 +239,7 @@ class TestConflict:
         )
         assert first.status_code == 201
         old_id = first.json()["id"]
-        old_path = (
-            db.query(StudentExam.file_path).filter(StudentExam.id == old_id).scalar()
-        )
+        old_path = db.query(StudentExam.file_path).filter(StudentExam.id == old_id).scalar()
         assert old_path
 
         second = client.post(
@@ -293,11 +289,7 @@ class TestConflict:
         )
         assert first.status_code == 201
         # Force the exam into 'processing' to simulate an in-flight grade
-        existing = (
-            db.query(StudentExam)
-            .filter(StudentExam.id == first.json()["id"])
-            .one()
-        )
+        existing = db.query(StudentExam).filter(StudentExam.id == first.json()["id"]).one()
         existing.status = "processing"
         db.commit()
 

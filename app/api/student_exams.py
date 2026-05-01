@@ -290,10 +290,7 @@ async def generate_and_assign_exam(
     should_grade = (
         auto_grade
         and bool(settings.OPENAI_API_KEY)
-        and db.query(Question)
-        .filter(Question.project_id == project_id, Question.is_confirmed.is_(True))
-        .count()
-        > 0
+        and db.query(Question).filter(Question.project_id == project_id, Question.is_confirmed.is_(True)).count() > 0
     )
     if should_grade:
         student_exam.status = "processing"
