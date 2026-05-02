@@ -58,6 +58,57 @@ class TestAnalyzeImages:
         )
         assert response.status_code in (400, 422)
 
+    def test_one_valid_one_invalid_returns_200_with_per_image_errors(
+        self,
+        client: TestClient,
+        test_user: User,
+        auth_headers: dict,
+    ) -> None:
+        """Mixed batch: the valid one is processed, the invalid one carries an
+        `error` field. Whole request still returns 200 so the user can keep
+        the working photos."""
+        valid_png = _make_png_with_content()
+        garbage = b"this-is-not-an-image"
+        response = client.post(
+            "/api/v1/pdf-generator/analyze",
+            headers=auth_headers,
+            files=[
+                ("files", ("ok.png", valid_png, "image/png")),
+                ("files", ("bad.bin", garbage, "image/png")),
+            ],
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert len(data) == 2
+
+        ok = data[0]
+        bad = data[1]
+        assert ok["error"] is None
+        assert ok["processed_image_base64"]
+        assert bad["error"]
+        assert bad["processed_image_base64"] is None
+
+    def test_all_invalid_returns_400(
+        self,
+        client: TestClient,
+        test_user: User,
+        auth_headers: dict,
+    ) -> None:
+        """If *every* image in the batch failed, surface 400 so the user
+        knows nothing landed on the server."""
+        garbage = b"definitely-not-an-image"
+        response = client.post(
+            "/api/v1/pdf-generator/analyze",
+            headers=auth_headers,
+            files=[
+                ("files", ("a.bin", garbage, "image/png")),
+                ("files", ("b.bin", garbage, "image/png")),
+            ],
+        )
+        assert response.status_code == 400
+        # The detail should include something useful, not just a generic msg.
+        assert "imagen" in response.json()["detail"].lower()
+
 
 class TestCropImage:
     def test_valid_crop(self, client: TestClient, test_user: User, auth_headers: dict) -> None:
