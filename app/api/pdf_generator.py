@@ -60,11 +60,22 @@ async def analyze_images(
     files: list[UploadFile],
     current_user: User = Depends(get_current_active_user),
 ) -> list[dict]:
-    """Receive uploaded images and return processed (cropped + enhanced) previews."""
+    """Receive uploaded images and return processed (cropped + enhanced) previews.
+
+    Each entry in the response carries either a processed preview or an
+    `error` string explaining why that one image failed. The endpoint only
+    raises 400 when *every* image failed — partial failures are surfaced
+    per-image so the frontend can keep the good ones and let the user retry
+    or remove the broken ones. Previously a single bad image (corrupt EXIF,
+    unsupported format, transient OOM in cv2.imdecode, ...) made the entire
+    batch fail with 400, which looked to the user like the whole wizard
+    was broken.
+    """
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No images provided")
 
-    results = []
+    results: list[dict] = []
+    success_count = 0
     for index, upload in enumerate(files):
         try:
             image_bytes = await upload.read()
@@ -80,16 +91,36 @@ async def analyze_images(
                     "original_width": original.width,
                     "original_height": original.height,
                     "processed_image_base64": processed_b64,
+                    "error": None,
                 }
             )
+            success_count += 1
         except Exception as e:
-            logger.error(f"Error analyzing image {index}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to process image at index {index}: {str(e)}",
+            logger.error("Error analyzing image {} ({}): {}", index, upload.filename, e)
+            results.append(
+                {
+                    "index": index,
+                    "original_width": None,
+                    "original_height": None,
+                    "processed_image_base64": None,
+                    "error": str(e),
+                }
             )
 
-    logger.info(f"User {current_user.id} analyzed {len(results)} images (smart crop + enhance)")
+    if success_count == 0:
+        first_err = next((r["error"] for r in results if r.get("error")), "Unknown error")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo procesar ninguna imagen: {first_err}",
+        )
+
+    logger.info(
+        "User {} analyzed {} images: {} ok, {} failed",
+        current_user.id,
+        len(results),
+        success_count,
+        len(results) - success_count,
+    )
     return results
 
 
