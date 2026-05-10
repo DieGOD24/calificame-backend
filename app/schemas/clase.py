@@ -110,6 +110,11 @@ class GradebookCell(BaseModel):
     score: float | None = None
     max_score: float | None = None
     percentage: float | None = None
+    # Status of the latest StudentExam for this student+project pair, or null
+    # when no exam exists yet. Allows the UI to distinguish "graded" cells
+    # (show percentage) from "error"/"processing"/"uploaded" (show badge).
+    status: str | None = None
+    error_message: str | None = None
 
 
 class GradebookRow(BaseModel):
