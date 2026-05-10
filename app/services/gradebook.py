@@ -91,9 +91,7 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
                         project_id=pid,
                         project_name=project_names[pid],
                         status=exam.status if exam else None,
-                        error_message=(
-                            exam.error_message if exam and exam.status == "error" else None
-                        ),
+                        error_message=(exam.error_message if exam and exam.status == "error" else None),
                     )
                 )
 
