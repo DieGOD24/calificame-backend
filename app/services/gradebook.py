@@ -39,7 +39,14 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
         project_ids.append(cp.project_id)
         project_names[cp.project_id] = name
 
-    # Fetch all student exams for these projects
+    # Fetch all student exams for these projects. There's a UNIQUE constraint
+    # on (project_id, student_identifier), so at most one exam exists per
+    # (student, project) — the order_by/preference logic that used to live
+    # here was a no-op, but it could mask a status=error row that still had
+    # a stale grade_percentage from an earlier successful grading run (the
+    # Jorge Luis incident — see QA report S2.2). The fix: read `status`
+    # explicitly downstream and never expose grade_percentage when status is
+    # not "graded".
     exam_lookup: dict[tuple[str, str], StudentExam] = {}
     if project_ids:
         exams = (
@@ -52,9 +59,7 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
         )
         for exam in exams:
             key = (exam.student_identifier.strip().lower(), exam.project_id)
-            # Keep the most recent or highest graded exam
-            if key not in exam_lookup or (exam.status == "graded" and exam_lookup[key].status != "graded"):
-                exam_lookup[key] = exam
+            exam_lookup[key] = exam
 
     # Build rows
     rows: list[GradebookRow] = []
@@ -73,14 +78,22 @@ def build_gradebook(db: Session, clase: Class) -> GradebookResponse:
                         score=exam.total_score,
                         max_score=exam.max_score,
                         percentage=exam.grade_percentage,
+                        status="graded",
                     )
                 )
                 scores.append(exam.grade_percentage)
             else:
+                # Surface the underlying status so the UI can render an
+                # "error" / "processing" / "uploaded" badge instead of an
+                # empty cell that looks identical to "no exam at all".
                 cells.append(
                     GradebookCell(
                         project_id=pid,
                         project_name=project_names[pid],
+                        status=exam.status if exam else None,
+                        error_message=(
+                            exam.error_message if exam and exam.status == "error" else None
+                        ),
                     )
                 )
 

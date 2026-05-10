@@ -180,6 +180,92 @@ class TestGetGradebook:
         response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers_admin)
         assert response.status_code == 200
 
+    def test_exam_with_status_error_hides_stale_grade(
+        self,
+        client: TestClient,
+        db: Session,
+        test_user: User,
+        test_class: Class,
+        auth_headers: dict,
+    ) -> None:
+        """Regression for QA report S2.2 (Jorge Luis incident).
+
+        Scenario: a student exam was previously graded (e.g. 97%), then a
+        retry-grade hit the OpenAI rate limit and the row was flipped to
+        status='error' WITHOUT clearing `grade_percentage`. The unique
+        constraint on (project_id, student_identifier) means there's only one
+        row per pair — so the gradebook must check `status` explicitly and
+        suppress the stale percentage.
+        """
+        e1, e2, p1, p2 = _setup_graded_class(db, test_user, test_class)
+
+        # Mutate Alice's project-1 exam: it was graded at 80%, but a re-grade
+        # failed and the system flipped status to 'error' while keeping the
+        # old percentage intact (this is exactly how grading.py persists the
+        # error today — see app/services/grading.py).
+        alice_e1 = (
+            db.query(StudentExam)
+            .filter(StudentExam.project_id == p1.id, StudentExam.student_identifier == "STU-A")
+            .one()
+        )
+        alice_e1.status = "error"
+        alice_e1.error_message = "Servicio de IA saturado (rate limit). Espera 1 minuto."
+        # NOTE: grade_percentage stays at 80.0 (stale).
+        db.commit()
+
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        alice_row = next(r for r in data["rows"] if r["student_identifier"] == "STU-A")
+        # Project 1 cell: must NOT leak the stale 80%.
+        p1_cell = next(c for c in alice_row["projects"] if c["project_id"] == p1.id)
+        assert p1_cell["status"] == "error"
+        assert p1_cell["percentage"] is None
+        assert p1_cell["score"] is None
+        assert "saturado" in (p1_cell.get("error_message") or "")
+        # Project 2 cell stays at 90% (unaffected).
+        p2_cell = next(c for c in alice_row["projects"] if c["project_id"] == p2.id)
+        assert p2_cell["status"] == "graded"
+        assert p2_cell["percentage"] == 90.0
+        # Alice's average is now just project 2's grade (90%).
+        assert alice_row["average"] == 90.0
+        # Pass status reflects the average; 90% > 60% threshold.
+        assert alice_row["pass_status"] == "passing"
+
+    def test_processing_exam_surfaces_status_in_cell(
+        self,
+        client: TestClient,
+        db: Session,
+        test_user: User,
+        test_class: Class,
+        auth_headers: dict,
+    ) -> None:
+        """Empty cell vs 'processing' cell should be distinguishable: the new
+        `status` field on the cell tells the UI which badge to render."""
+        e1, e2, p1, p2 = _setup_graded_class(db, test_user, test_class)
+
+        # Bob has graded p1 already; add a processing p2 for Bob.
+        db.add(
+            StudentExam(
+                id=str(uuid4()),
+                project_id=p2.id,
+                student_name="Bob",
+                student_identifier="STU-B",
+                file_path="/fake/bob_e2.pdf",
+                status="processing",
+            )
+        )
+        db.commit()
+
+        response = client.get(f"/api/v1/classes/{test_class.id}/gradebook", headers=auth_headers)
+        data = response.json()
+
+        bob_row = next(r for r in data["rows"] if r["student_identifier"] == "STU-B")
+        p2_cell = next(c for c in bob_row["projects"] if c["project_id"] == p2.id)
+        assert p2_cell["status"] == "processing"
+        assert p2_cell["percentage"] is None
+
 
 class TestExportGradebook:
     def test_export_csv(
