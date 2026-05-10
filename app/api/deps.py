@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from app.models.clase import Class, ClassProject
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.services.auth import decode_access_token
@@ -71,17 +72,42 @@ def require_role(*roles: UserRole):
     return _check_role
 
 
+def can_user_access_project(db: Session, project: Project, user: User) -> bool:
+    """Return True when `user` can read this project.
+
+    Authorized callers:
+    - Developer / admin (anything)
+    - The project owner
+    - The professor of any class to which this project is linked via
+      ClassProject. This is the case the previous policy was missing — a
+      class professor could see her gradebook but was 403'd on every
+      `/projects/{id}/...` endpoint, including grading summary, exam list
+      and analytics. (See QA report V3 — "media perdida" — for repro.)
+    """
+    if user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
+        return True
+    if project.owner_id == user.id:
+        return True
+    # Is the user the professor of any class that links to this project?
+    linked_class_professor_id = (
+        db.query(Class.professor_id)
+        .join(ClassProject, ClassProject.class_id == Class.id)
+        .filter(ClassProject.project_id == project.id)
+        .filter(Class.professor_id == user.id)
+        .first()
+    )
+    return linked_class_professor_id is not None
+
+
 def get_user_project(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Project:
-    """Get a project belonging to the current user. Developer/Admin can access any project."""
+    """Get a project the current user can access (owner, class professor, admin)."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if current_user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
-        return project
-    if project.owner_id != current_user.id:
+    if not can_user_access_project(db, project, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return project

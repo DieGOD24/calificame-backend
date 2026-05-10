@@ -3,7 +3,7 @@ from loguru import logger
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import can_user_access_project, get_current_active_user, get_db
 from app.models.clase import Class, ClassEnrollment, ClassProject
 from app.models.exam_answer import ExamAnswer
 from app.models.institution import Institution, InstitutionMember
@@ -29,14 +29,12 @@ def get_project_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ProjectAnalytics:
-    """Get analytics for a project. Accessible by owner, Developer, or Admin."""
-    # Use get_user_project logic inline for auth check
+    """Get analytics for a project. Accessible by owner, class professor, Developer, or Admin."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if current_user.role not in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
-        if project.owner_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if not can_user_access_project(db, project, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     # Get graded exams
     exams = (
