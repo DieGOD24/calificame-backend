@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import os
@@ -16,7 +17,7 @@ from app.config import settings
 from app.models.task_log import TaskLog
 from app.models.user import User
 from app.rate_limit import limiter
-from app.services.image_processing import process_image
+from app.services.image_processing import process_image, process_image_ai
 
 router = APIRouter(prefix="/pdf-generator", tags=["PDF Generator"])
 
@@ -74,38 +75,68 @@ async def analyze_images(
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No images provided")
 
-    results: list[dict] = []
-    success_count = 0
+    # Read every upload up-front so we don't hold UploadFile handles across the
+    # parallel processing stage. Reads themselves are sequential (each await
+    # consumes a single connection) but cheap.
+    raw_inputs: list[tuple[int, str | None, bytes | None, str | None]] = []
     for index, upload in enumerate(files):
         try:
-            image_bytes = await upload.read()
-            original = Image.open(io.BytesIO(image_bytes))
+            data = await upload.read()
+            raw_inputs.append((index, upload.filename, data, None))
+        except Exception as exc:
+            logger.error("Error reading upload {} ({}): {}", index, upload.filename, exc)
+            raw_inputs.append((index, upload.filename, None, str(exc)))
 
-            # Smart crop + text enhancement
-            processed_bytes = process_image(image_bytes)
-            processed_b64 = base64.b64encode(processed_bytes).decode("utf-8")
+    use_ai = bool(settings.USE_AI_PREPROCESSING)
+    cpu_fn = process_image_ai if use_ai else process_image
+    semaphore = asyncio.Semaphore(max(1, int(settings.AI_PREPROCESSING_CONCURRENCY)))
+    loop = asyncio.get_running_loop()
 
-            results.append(
-                {
-                    "index": index,
-                    "original_width": original.width,
-                    "original_height": original.height,
-                    "processed_image_base64": processed_b64,
-                    "error": None,
-                }
-            )
-            success_count += 1
-        except Exception as e:
-            logger.error("Error analyzing image {} ({}): {}", index, upload.filename, e)
-            results.append(
-                {
-                    "index": index,
-                    "original_width": None,
-                    "original_height": None,
-                    "processed_image_base64": None,
-                    "error": str(e),
-                }
-            )
+    async def _process_one(idx: int, filename: str | None, data: bytes | None, read_err: str | None) -> dict:
+        if read_err is not None or data is None:
+            return {
+                "index": idx,
+                "original_width": None,
+                "original_height": None,
+                "processed_image_base64": None,
+                "error": read_err or "Could not read upload",
+            }
+        try:
+            original = Image.open(io.BytesIO(data))
+            orig_w, orig_h = original.width, original.height
+        except Exception as exc:
+            logger.error("Image decode failed for {} ({}): {}", idx, filename, exc)
+            return {
+                "index": idx,
+                "original_width": None,
+                "original_height": None,
+                "processed_image_base64": None,
+                "error": str(exc),
+            }
+
+        try:
+            async with semaphore:
+                processed = await loop.run_in_executor(None, cpu_fn, data)
+            return {
+                "index": idx,
+                "original_width": orig_w,
+                "original_height": orig_h,
+                "processed_image_base64": base64.b64encode(processed).decode("utf-8"),
+                "error": None,
+            }
+        except Exception as exc:
+            logger.error("Error analyzing image {} ({}): {}", idx, filename, exc)
+            return {
+                "index": idx,
+                "original_width": orig_w,
+                "original_height": orig_h,
+                "processed_image_base64": None,
+                "error": str(exc),
+            }
+
+    results = await asyncio.gather(*(_process_one(*item) for item in raw_inputs))
+    results = sorted(results, key=lambda r: r["index"])
+    success_count = sum(1 for r in results if r["error"] is None)
 
     if success_count == 0:
         first_err = next((r["error"] for r in results if r.get("error")), "Unknown error")
@@ -115,9 +146,10 @@ async def analyze_images(
         )
 
     logger.info(
-        "User {} analyzed {} images: {} ok, {} failed",
+        "User {} analyzed {} images (ai={}): {} ok, {} failed",
         current_user.id,
         len(results),
+        use_ai,
         success_count,
         len(results) - success_count,
     )

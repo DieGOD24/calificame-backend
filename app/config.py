@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     AI_MODEL: str = "gpt-4.1"
 
+    # AI-guided image preprocessing in /pdf-generator/analyze.
+    # ON: gpt-4.1 vision suggests document corners + enhancement params per photo.
+    # OFF (escape hatch): fall back to pure OpenCV (smart_crop + enhance_text).
+    USE_AI_PREPROCESSING: bool = True
+    # Concurrency cap when /analyze processes multiple photos in parallel.
+    AI_PREPROCESSING_CONCURRENCY: int = 6
+
     STORAGE_TYPE: str = "local"
     STORAGE_LOCAL_PATH: str = "./uploads"
 
