@@ -1,4 +1,5 @@
 import io
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -195,6 +196,155 @@ class TestImageProcessing:
         # Should be valid PNG
         result_img = Image.open(io.BytesIO(result))
         assert result_img.format == "PNG"
+
+
+class TestProcessImageAI:
+    """The AI-guided pipeline mocks the analyzer; no network calls."""
+
+    def _png(self, w: int = 400, h: int = 500) -> bytes:
+        return _make_png_with_content(w, h)
+
+    def test_happy_path_applies_corners_and_enhance(self) -> None:
+        from app.services.image_processing import process_image_ai
+
+        analyzer = MagicMock()
+        analyzer.analyze.return_value = {
+            "is_document": True,
+            "corners": [[20, 20], [380, 20], [380, 480], [20, 480]],
+            "rotation_deg": 0.0,
+            "enhance_params": {"clahe_clip": 2.5, "gamma": 1.0, "binarize": False},
+            "confidence": 0.95,
+        }
+        out = process_image_ai(self._png(), preprocessor=analyzer)
+        analyzer.analyze.assert_called_once()
+        result = Image.open(io.BytesIO(out))
+        assert result.format == "PNG"
+
+    def test_invalid_corners_skip_warp_but_still_enhance(self) -> None:
+        from app.services.image_processing import process_image_ai
+
+        analyzer = MagicMock()
+        # Corners covering <5% area — must be rejected, but enhance still runs.
+        analyzer.analyze.return_value = {
+            "is_document": True,
+            "corners": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "rotation_deg": 0.0,
+            "enhance_params": {},
+            "confidence": 0.3,
+        }
+        out = process_image_ai(self._png(), preprocessor=analyzer)
+        result = Image.open(io.BytesIO(out))
+        # Output is the unwarped enhanced image: same dimensions as input.
+        assert result.width == 400
+        assert result.height == 500
+
+    def test_is_document_false_only_enhances(self) -> None:
+        from app.services.image_processing import process_image_ai
+
+        analyzer = MagicMock()
+        analyzer.analyze.return_value = {
+            "is_document": False,
+            "corners": None,
+            "rotation_deg": 0.0,
+            "enhance_params": {"clahe_clip": 2.0},
+            "confidence": 0.1,
+        }
+        out = process_image_ai(self._png(), preprocessor=analyzer)
+        result = Image.open(io.BytesIO(out))
+        assert result.width == 400
+        assert result.height == 500
+
+    def test_analyzer_exception_falls_back_to_opencv(self) -> None:
+        from app.services.image_processing import process_image_ai
+
+        analyzer = MagicMock()
+        analyzer.analyze.side_effect = RuntimeError("OpenAI down")
+        out = process_image_ai(self._png(), preprocessor=analyzer)
+        # Fallback returns valid PNG — same as the OpenCV-only pipeline would.
+        Image.open(io.BytesIO(out))
+
+
+class TestAnalyzeFlag:
+    """The /analyze endpoint switches pipelines based on USE_AI_PREPROCESSING."""
+
+    def test_flag_off_uses_opencv_pipeline(
+        self,
+        client: TestClient,
+        test_user: User,
+        auth_headers: dict,
+    ) -> None:
+        png = _make_png_with_content()
+        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
+            "app.api.pdf_generator.process_image"
+        ) as mock_pi, patch("app.api.pdf_generator.process_image_ai") as mock_ai:
+            mock_settings.USE_AI_PREPROCESSING = False
+            mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
+            mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
+            mock_pi.return_value = png  # echo back as "processed"
+            response = client.post(
+                "/api/v1/pdf-generator/analyze",
+                headers=auth_headers,
+                files=[("files", ("a.png", png, "image/png"))],
+            )
+        assert response.status_code == 200, response.text
+        assert mock_pi.called
+        assert not mock_ai.called
+
+    def test_flag_on_uses_ai_pipeline(
+        self,
+        client: TestClient,
+        test_user: User,
+        auth_headers: dict,
+    ) -> None:
+        png = _make_png_with_content()
+        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
+            "app.api.pdf_generator.process_image"
+        ) as mock_pi, patch("app.api.pdf_generator.process_image_ai") as mock_ai:
+            mock_settings.USE_AI_PREPROCESSING = True
+            mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
+            mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
+            mock_ai.return_value = png
+            response = client.post(
+                "/api/v1/pdf-generator/analyze",
+                headers=auth_headers,
+                files=[("files", ("a.png", png, "image/png"))],
+            )
+        assert response.status_code == 200, response.text
+        assert mock_ai.called
+        assert not mock_pi.called
+
+    def test_runs_in_parallel(
+        self,
+        client: TestClient,
+        test_user: User,
+        auth_headers: dict,
+    ) -> None:
+        """4 photos × 100ms processing must finish in well under 400ms (serial)."""
+        import time
+
+        png = _make_png_with_content()
+
+        def slow(_data: bytes) -> bytes:
+            time.sleep(0.1)
+            return png
+
+        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
+            "app.api.pdf_generator.process_image_ai", side_effect=slow
+        ):
+            mock_settings.USE_AI_PREPROCESSING = True
+            mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
+            mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
+            start = time.perf_counter()
+            response = client.post(
+                "/api/v1/pdf-generator/analyze",
+                headers=auth_headers,
+                files=[("files", (f"a{i}.png", png, "image/png")) for i in range(4)],
+            )
+            elapsed = time.perf_counter() - start
+
+        assert response.status_code == 200, response.text
+        # 4 in parallel ≈ 100-150ms; serial would be >=400ms. Use 350 as buffer.
+        assert elapsed < 0.35, f"Expected parallel execution, took {elapsed:.3f}s"
 
 
 class TestGeneratePdf:
