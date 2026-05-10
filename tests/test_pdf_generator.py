@@ -274,9 +274,11 @@ class TestAnalyzeFlag:
         auth_headers: dict,
     ) -> None:
         png = _make_png_with_content()
-        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
-            "app.api.pdf_generator.process_image"
-        ) as mock_pi, patch("app.api.pdf_generator.process_image_ai") as mock_ai:
+        with (
+            patch("app.api.pdf_generator.settings") as mock_settings,
+            patch("app.api.pdf_generator.process_image") as mock_pi,
+            patch("app.api.pdf_generator.process_image_ai") as mock_ai,
+        ):
             mock_settings.USE_AI_PREPROCESSING = False
             mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
             mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
@@ -297,9 +299,11 @@ class TestAnalyzeFlag:
         auth_headers: dict,
     ) -> None:
         png = _make_png_with_content()
-        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
-            "app.api.pdf_generator.process_image"
-        ) as mock_pi, patch("app.api.pdf_generator.process_image_ai") as mock_ai:
+        with (
+            patch("app.api.pdf_generator.settings") as mock_settings,
+            patch("app.api.pdf_generator.process_image") as mock_pi,
+            patch("app.api.pdf_generator.process_image_ai") as mock_ai,
+        ):
             mock_settings.USE_AI_PREPROCESSING = True
             mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
             mock_settings.RATE_LIMIT_UPLOAD = "10/minute"
@@ -328,8 +332,9 @@ class TestAnalyzeFlag:
             time.sleep(0.1)
             return png
 
-        with patch("app.api.pdf_generator.settings") as mock_settings, patch(
-            "app.api.pdf_generator.process_image_ai", side_effect=slow
+        with (
+            patch("app.api.pdf_generator.settings") as mock_settings,
+            patch("app.api.pdf_generator.process_image_ai", side_effect=slow),
         ):
             mock_settings.USE_AI_PREPROCESSING = True
             mock_settings.AI_PREPROCESSING_CONCURRENCY = 6
