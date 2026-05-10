@@ -388,3 +388,161 @@ class TestExportResults:
         assert data["project"]["id"] == test_project.id
         assert "questions" in data
         assert "results" in data
+
+
+class TestFriendlyErrorMapping:
+    """Translate raw exceptions / RetryError into user-facing Spanish messages."""
+
+    def _retry_error_wrapping(self, inner_exc: BaseException):
+        """Build a tenacity.RetryError that wraps `inner_exc` like real retries do."""
+        from concurrent.futures import Future
+
+        from tenacity import RetryError
+
+        fut: Future = Future()
+        fut.set_exception(inner_exc)
+        return RetryError(fut)
+
+    def _make_rate_limit_error(self):
+        """Construct a real openai.RateLimitError matching the v1 SDK signature."""
+        import httpx
+        from openai import RateLimitError
+
+        # The SDK constructor needs message + a response object.
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        response = httpx.Response(429, request=request)
+        return RateLimitError("Rate limit reached", response=response, body=None)
+
+    def _make_auth_error(self):
+        import httpx
+        from openai import AuthenticationError
+
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        response = httpx.Response(401, request=request)
+        return AuthenticationError("Invalid API key", response=response, body=None)
+
+    def test_retry_error_with_rate_limit_maps_to_friendly_spanish(self) -> None:
+        from app.services.grading import _friendly_error
+
+        wrapped = self._retry_error_wrapping(self._make_rate_limit_error())
+        msg = _friendly_error(wrapped)
+        assert "saturado" in msg.lower()
+        assert "rate limit" in msg.lower()
+        # Crucially, the ugly tenacity repr must not leak.
+        assert "RetryError" not in msg
+        assert "Future at" not in msg
+
+    def test_authentication_error_maps_to_friendly_spanish(self) -> None:
+        from app.services.grading import _friendly_error
+
+        msg = _friendly_error(self._make_auth_error())
+        assert "openai" in msg.lower()
+        assert "invalida" in msg.lower() or "configura" in msg.lower()
+
+    def test_retry_error_with_auth_unwraps_correctly(self) -> None:
+        from app.services.grading import _friendly_error
+
+        wrapped = self._retry_error_wrapping(self._make_auth_error())
+        msg = _friendly_error(wrapped)
+        assert "openai" in msg.lower()
+        assert "RetryError" not in msg
+
+    def test_unknown_exception_falls_back_to_truncated_str(self) -> None:
+        from app.services.grading import _friendly_error
+
+        msg = _friendly_error(RuntimeError("something exploded"))
+        assert "something exploded" in msg
+        # Must be capped at 500 chars
+        assert len(msg) <= 500
+
+    def test_retry_error_with_no_inner_exception_does_not_crash(self) -> None:
+        """Defensive: if RetryError.last_attempt is somehow malformed."""
+        from tenacity import RetryError
+
+        from app.services.grading import _friendly_error
+
+        # Not realistic but guards the try/except in _friendly_error
+        bare = RetryError.__new__(RetryError)
+        bare.last_attempt = None  # type: ignore[assignment]
+        msg = _friendly_error(bare)
+        # Falls back to str(exc)[:500]; no crash.
+        assert isinstance(msg, str)
+        assert len(msg) <= 500
+
+
+class TestVisionDownscale:
+    """BaseAgent should shrink large images before sending to OpenAI."""
+
+    def _make_jpeg(self, width: int, height: int) -> bytes:
+        from PIL import Image
+
+        img = Image.new("RGB", (width, height), "white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    def _capture_sent_image(self, client: MagicMock) -> tuple[int, int]:
+        """Pull the image embedded in the OpenAI call and return its dimensions."""
+        import base64
+
+        from PIL import Image
+
+        args, kwargs = client.chat.completions.create.call_args
+        user_content = kwargs["messages"][1]["content"]
+        image_part = next(p for p in user_content if p.get("type") == "image_url")
+        b64 = image_part["image_url"]["url"].split(",", 1)[1]
+        decoded = base64.b64decode(b64)
+        sent = Image.open(io.BytesIO(decoded))
+        return sent.width, sent.height
+
+    def _stub_client(self, content: str = "ok") -> MagicMock:
+        client = MagicMock()
+        choice = MagicMock()
+        choice.message.content = content
+        response = MagicMock()
+        response.choices = [choice]
+        client.chat.completions.create.return_value = response
+        return client
+
+    def test_large_image_is_downscaled_to_long_edge_1800(self) -> None:
+        from app.agents.base import BaseAgent
+
+        class _Agent(BaseAgent):
+            def execute(self, **kwargs):
+                return None
+
+        client = self._stub_client()
+        agent = _Agent(openai_client=client)
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[self._make_jpeg(4000, 3000)])
+        w, h = self._capture_sent_image(client)
+        assert max(w, h) <= 1800
+        # Aspect ratio preserved (within rounding)
+        assert abs((w / h) - (4000 / 3000)) < 0.02
+
+    def test_small_image_is_passed_through_unchanged(self) -> None:
+        from app.agents.base import BaseAgent
+
+        class _Agent(BaseAgent):
+            def execute(self, **kwargs):
+                return None
+
+        client = self._stub_client()
+        agent = _Agent(openai_client=client)
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[self._make_jpeg(800, 600)])
+        w, h = self._capture_sent_image(client)
+        assert (w, h) == (800, 600)
+
+    def test_corrupt_bytes_pass_through_to_to_png(self) -> None:
+        """Defensive: PIL fails on garbage bytes — _downscale_for_vision falls back."""
+        from app.agents.base import BaseAgent
+
+        class _Agent(BaseAgent):
+            def execute(self, **kwargs):
+                return None
+
+        client = self._stub_client()
+        agent = _Agent(openai_client=client)
+        # Should not raise
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[b"not-an-image-at-all"])
+        # And the request still went out
+        assert client.chat.completions.create.called

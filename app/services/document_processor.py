@@ -13,11 +13,17 @@ from app.services.storage import get_storage_service
 
 
 def _pdf_to_images(pdf_bytes: bytes) -> list[bytes]:
-    """Convert each PDF page to a PNG image."""
+    """Convert each PDF page to a PNG image.
+
+    150 DPI is enough for handwriting recognition by GPT-4 vision and roughly
+    halves the byte size vs 200 DPI. Combined with the long-edge downscale in
+    BaseAgent._downscale_for_vision, this keeps a typical phone-photo PDF
+    well under the per-minute TPM ceiling on low-tier OpenAI accounts.
+    """
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     images: list[bytes] = []
     for page in doc:
-        pix = page.get_pixmap(dpi=200)
+        pix = page.get_pixmap(dpi=150)
         images.append(pix.tobytes("png"))
     doc.close()
     return images

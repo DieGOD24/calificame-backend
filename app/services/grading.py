@@ -2,7 +2,15 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from loguru import logger
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AuthenticationError,
+    BadRequestError,
+    RateLimitError,
+)
 from sqlalchemy.orm import Session
+from tenacity import RetryError
 
 from app.models.exam_answer import ExamAnswer
 from app.models.project import Project, ProjectStatus
@@ -10,6 +18,40 @@ from app.models.question import Question
 from app.models.student_exam import StudentExam
 from app.services.document_processor import _pdf_to_images
 from app.services.storage import get_storage_service
+
+
+def _friendly_error(exc: BaseException) -> str:
+    """Translate a grading exception into a user-facing message in Spanish.
+
+    Tenacity wraps the underlying API error in a RetryError whose default
+    repr leaks the Future address (e.g. "RetryError[<Future at 0x... raised
+    RateLimitError>]"). We unwrap it and map common cases to actionable text.
+    """
+    inner: BaseException = exc
+    if isinstance(inner, RetryError):
+        try:
+            last_attempt = inner.last_attempt
+            if last_attempt is not None:
+                wrapped = last_attempt.exception()
+                if wrapped is not None:
+                    inner = wrapped
+        except Exception:
+            pass
+
+    if isinstance(inner, RateLimitError):
+        return (
+            "Servicio de IA saturado (rate limit). Espera 1 minuto y dale "
+            "'Recalificar'. Si persiste, sube el plan de OpenAI."
+        )
+    if isinstance(inner, AuthenticationError):
+        return "Llave de OpenAI invalida. Configura OPENAI_API_KEY en el servidor."
+    if isinstance(inner, (APITimeoutError, APIConnectionError)):
+        return "El servicio de IA no respondio a tiempo. Intenta nuevamente con 'Recalificar'."
+    if isinstance(inner, BadRequestError):
+        # Often "image too large" or "unsupported format"
+        return f"Solicitud invalida al servicio de IA: {str(inner)[:200]}"
+
+    return str(exc)[:500]
 
 
 class GradingService:
@@ -105,7 +147,7 @@ class GradingService:
                 fresh = db.query(StudentExam).filter(StudentExam.id == student_exam.id).first()
                 if fresh is not None:
                     fresh.status = "error"
-                    fresh.error_message = str(e)[:500]
+                    fresh.error_message = _friendly_error(e)
                     db.commit()
                     db.refresh(fresh)
                     return fresh
