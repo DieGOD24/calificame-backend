@@ -46,10 +46,7 @@ def _friendly_error(exc: BaseException) -> str:
     if isinstance(inner, AuthenticationError):
         return "Llave de OpenAI invalida. Configura OPENAI_API_KEY en el servidor."
     if isinstance(inner, (APITimeoutError, APIConnectionError)):
-        return (
-            "El servicio de IA no respondio a tiempo. Intenta nuevamente con "
-            "'Recalificar'."
-        )
+        return "El servicio de IA no respondio a tiempo. Intenta nuevamente con 'Recalificar'."
     if isinstance(inner, BadRequestError):
         # Often "image too large" or "unsupported format"
         return f"Solicitud invalida al servicio de IA: {str(inner)[:200]}"

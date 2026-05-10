@@ -513,9 +513,7 @@ class TestVisionDownscale:
 
         client = self._stub_client()
         agent = _Agent(openai_client=client)
-        agent._chat_completion_with_images(
-            system_prompt="x", user_text="x", images=[self._make_jpeg(4000, 3000)]
-        )
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[self._make_jpeg(4000, 3000)])
         w, h = self._capture_sent_image(client)
         assert max(w, h) <= 1800
         # Aspect ratio preserved (within rounding)
@@ -530,9 +528,7 @@ class TestVisionDownscale:
 
         client = self._stub_client()
         agent = _Agent(openai_client=client)
-        agent._chat_completion_with_images(
-            system_prompt="x", user_text="x", images=[self._make_jpeg(800, 600)]
-        )
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[self._make_jpeg(800, 600)])
         w, h = self._capture_sent_image(client)
         assert (w, h) == (800, 600)
 
@@ -547,8 +543,6 @@ class TestVisionDownscale:
         client = self._stub_client()
         agent = _Agent(openai_client=client)
         # Should not raise
-        agent._chat_completion_with_images(
-            system_prompt="x", user_text="x", images=[b"not-an-image-at-all"]
-        )
+        agent._chat_completion_with_images(system_prompt="x", user_text="x", images=[b"not-an-image-at-all"])
         # And the request still went out
         assert client.chat.completions.create.called
