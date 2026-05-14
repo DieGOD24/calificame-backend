@@ -327,3 +327,53 @@ class TestListInvitations:
 
         db.refresh(stale)
         assert stale.status == "expired"
+
+
+class TestMemberLimits:
+    def test_invite_blocked_when_professor_cap_reached(
+        self,
+        client: TestClient,
+        db: Session,
+        test_admin_user: User,
+        auth_headers_admin: dict,
+    ) -> None:
+        inst = _make_institution(db, test_admin_user, slug="cap-prof")
+        inst.max_professors = 1
+        db.commit()
+
+        # First invite fills the only professor seat (still pending).
+        first = client.post(
+            f"/api/v1/institutions/{inst.id}/members/invite",
+            headers=auth_headers_admin,
+            json={"email": "prof1@example.com", "role": "professor"},
+        )
+        assert first.status_code == 201, first.text
+
+        # Second invite for a professor must be rejected with a helpful 409.
+        second = client.post(
+            f"/api/v1/institutions/{inst.id}/members/invite",
+            headers=auth_headers_admin,
+            json={"email": "prof2@example.com", "role": "professor"},
+        )
+        assert second.status_code == 409
+        assert "max_professors" in second.json()["detail"]
+
+    def test_invite_uncapped_for_admin_role(
+        self,
+        client: TestClient,
+        db: Session,
+        test_admin_user: User,
+        auth_headers_admin: dict,
+    ) -> None:
+        """The limits are only for professor/student. Owner/admin must stay uncapped."""
+        inst = _make_institution(db, test_admin_user, slug="cap-admin")
+        inst.max_professors = 0
+        inst.max_students = 0
+        db.commit()
+
+        response = client.post(
+            f"/api/v1/institutions/{inst.id}/members/invite",
+            headers=auth_headers_admin,
+            json={"email": "another-admin@example.com", "role": "admin"},
+        )
+        assert response.status_code == 201, response.text
