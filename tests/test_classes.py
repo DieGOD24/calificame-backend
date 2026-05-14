@@ -96,6 +96,7 @@ class TestCreateClass:
     ) -> None:
         """Non-teaching roles (student / institution) must be rejected as professor_id."""
         from uuid import uuid4
+
         from app.models.user import User
         from app.services.auth import hash_password
 

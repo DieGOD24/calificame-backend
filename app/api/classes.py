@@ -151,10 +151,7 @@ def create_class(
     db.commit()
     db.refresh(clase)
 
-    logger.info(
-        f"User {current_user.id} created class {clase.id} ({clase.name}); "
-        f"professor_id={professor_id}"
-    )
+    logger.info(f"User {current_user.id} created class {clase.id} ({clase.name}); professor_id={professor_id}")
     return _class_to_response(clase)
 
 
