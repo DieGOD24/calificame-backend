@@ -101,9 +101,45 @@ def create_class(
         require_role(UserRole.DEVELOPER, UserRole.ADMIN, UserRole.INSTITUTION, UserRole.PROFESSOR)
     ),
 ) -> ClassResponse:
-    """Create a new class."""
+    """Create a new class.
+
+    The creator becomes the professor by default. Developer/admin/institution
+    roles may pass ``professor_id`` to assign someone else — the target must
+    exist and have a teaching role (developer, admin, or professor). Plain
+    professors cannot reassign and ``professor_id`` is ignored for them.
+    """
+    professor_id = current_user.id
+
+    if data.professor_id and data.professor_id != current_user.id:
+        # Only privileged roles may set a different professor.
+        if current_user.role not in (
+            UserRole.DEVELOPER.value,
+            UserRole.ADMIN.value,
+            UserRole.INSTITUTION.value,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins and institutions can assign a different professor",
+            )
+        target = db.query(User).filter(User.id == data.professor_id).first()
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="professor_id does not point to a known user",
+            )
+        if target.role not in (
+            UserRole.DEVELOPER.value,
+            UserRole.ADMIN.value,
+            UserRole.PROFESSOR.value,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User {target.email} has role '{target.role}' and cannot be a professor of a class",
+            )
+        professor_id = target.id
+
     clase = Class(
-        professor_id=current_user.id,
+        professor_id=professor_id,
         institution_id=data.institution_id,
         name=data.name,
         subject=data.subject,
@@ -115,7 +151,7 @@ def create_class(
     db.commit()
     db.refresh(clase)
 
-    logger.info(f"User {current_user.id} created class {clase.id} ({clase.name})")
+    logger.info(f"User {current_user.id} created class {clase.id} ({clase.name}); professor_id={professor_id}")
     return _class_to_response(clase)
 
 
