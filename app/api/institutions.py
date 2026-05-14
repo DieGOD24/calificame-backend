@@ -225,7 +225,9 @@ def invite_member(
     if not _is_institution_admin(db, institution_id, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to invite members")
 
-    now = datetime.now(UTC)
+    # The DB stores expires_at as TIMESTAMP WITHOUT TIME ZONE, so reads come back naive.
+    # Comparing naive vs aware raises TypeError, so we standardize on naive-UTC everywhere.
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     # Expire any stale pending invitations for this email so the user can re-invite.
     stale_invites = (
@@ -302,7 +304,7 @@ def list_invitations(
     if not _is_institution_admin(db, institution_id, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view invitations")
 
-    now = datetime.now(UTC)
+    now = datetime.now(UTC).replace(tzinfo=None)
     invitations = (
         db.query(InstitutionInvitation)
         .filter(InstitutionInvitation.institution_id == institution_id)
@@ -388,8 +390,8 @@ def accept_invitation(
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found or already used")
 
-    # Check if invitation is expired
-    if invitation.expires_at and invitation.expires_at < datetime.now(UTC):
+    # Check if invitation is expired (naive-UTC comparison; see invite_member for rationale)
+    if invitation.expires_at and invitation.expires_at < datetime.now(UTC).replace(tzinfo=None):
         invitation.status = "expired"
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation has expired")
