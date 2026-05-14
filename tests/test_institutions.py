@@ -153,6 +153,65 @@ class TestDeleteInstitution:
         response = client.delete(f"/api/v1/institutions/{inst.id}", headers=auth_headers)
         assert response.status_code == 403
 
+    def test_institution_owner_can_delete_own(self, client: TestClient, db: Session) -> None:
+        """A user with global role=institution who is the owner member of their
+        institution can delete it themselves — they no longer need a global admin.
+        """
+        from app.services.auth import create_access_token, hash_password
+
+        inst_user = User(
+            id=str(uuid4()),
+            email="inst-owner-del@example.com",
+            hashed_password=hash_password("x" * 16),
+            full_name="Inst Owner Del",
+            role="institution",
+            is_active=True,
+        )
+        db.add(inst_user)
+        inst = _make_institution(db, inst_user, slug="i-own-this")
+
+        token = create_access_token(data={"sub": inst_user.id})
+        response = client.delete(
+            f"/api/v1/institutions/{inst.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204, response.text
+
+    def test_institution_non_owner_member_cannot_delete(
+        self, client: TestClient, db: Session, test_admin_user: User
+    ) -> None:
+        """An admin-level member (not owner) of the institution still cannot
+        nuke it. That privilege is reserved for owner or global developer/admin.
+        """
+        from app.services.auth import create_access_token, hash_password
+
+        inst = _make_institution(db, test_admin_user, slug="owned-by-admin")
+        non_owner = User(
+            id=str(uuid4()),
+            email="admin-member@example.com",
+            hashed_password=hash_password("x" * 16),
+            full_name="Admin Member",
+            role="institution",
+            is_active=True,
+        )
+        db.add(non_owner)
+        db.add(
+            InstitutionMember(
+                id=str(uuid4()),
+                user_id=non_owner.id,
+                institution_id=inst.id,
+                role="admin",
+            )
+        )
+        db.commit()
+
+        token = create_access_token(data={"sub": non_owner.id})
+        response = client.delete(
+            f"/api/v1/institutions/{inst.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+
 
 class TestMembers:
     def test_list_members(
