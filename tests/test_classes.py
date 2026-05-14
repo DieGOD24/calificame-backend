@@ -104,8 +104,7 @@ class TestCreateClass:
         from app.models.clase import Class
         from app.models.institution import Institution, InstitutionMember
         from app.models.user import User
-        from app.services.auth import hash_password
-        from app.services.auth import create_access_token
+        from app.services.auth import create_access_token, hash_password
 
         # Create an institution-role user and make them owner of a fresh institution.
         inst_user = User(
