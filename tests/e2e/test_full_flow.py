@@ -24,7 +24,7 @@ class TestCompleteGradingFlow:
             "/api/v1/auth/register",
             json={
                 "email": "teacher@school.edu",
-                "password": "securepassword123",
+                "password": "Secure123pass",
                 "full_name": "Professor Smith",
             },
         )
@@ -35,7 +35,7 @@ class TestCompleteGradingFlow:
         # ====== Step 2: Login ======
         login_response = client.post(
             "/api/v1/auth/login",
-            json={"email": "teacher@school.edu", "password": "securepassword123"},
+            json={"email": "teacher@school.edu", "password": "Secure123pass"},
         )
         assert login_response.status_code == 200
         token = login_response.json()["access_token"]

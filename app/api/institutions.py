@@ -52,7 +52,7 @@ def _is_institution_admin(db: Session, institution_id: str, user: User) -> bool:
     return member is not None
 
 
-@router.post("/", response_model=InstitutionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=InstitutionResponse, status_code=status.HTTP_201_CREATED)
 def create_institution(
     data: InstitutionCreate,
     db: Session = Depends(get_db),
@@ -90,7 +90,7 @@ def create_institution(
     return _institution_to_response(institution)
 
 
-@router.get("/", response_model=list[InstitutionResponse])
+@router.get("", response_model=list[InstitutionResponse])
 def list_institutions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -224,13 +224,32 @@ def invite_member(
     if not _is_institution_admin(db, institution_id, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to invite members")
 
-    # Check for existing pending invitation
+    now = datetime.now(UTC)
+
+    # Expire any stale pending invitations for this email so the user can re-invite.
+    stale_invites = (
+        db.query(InstitutionInvitation)
+        .filter(
+            InstitutionInvitation.institution_id == institution_id,
+            InstitutionInvitation.email == data.email,
+            InstitutionInvitation.status == "pending",
+            InstitutionInvitation.expires_at < now,
+        )
+        .all()
+    )
+    for stale in stale_invites:
+        stale.status = "expired"
+    if stale_invites:
+        db.flush()
+
+    # Block re-invitation only when a still-valid pending invitation exists.
     existing_invite = (
         db.query(InstitutionInvitation)
         .filter(
             InstitutionInvitation.institution_id == institution_id,
             InstitutionInvitation.email == data.email,
             InstitutionInvitation.status == "pending",
+            InstitutionInvitation.expires_at >= now,
         )
         .first()
     )
@@ -247,7 +266,7 @@ def invite_member(
         token=str(uuid4()),
         status="pending",
         invited_by=current_user.id,
-        expires_at=datetime.now(UTC) + timedelta(days=7),
+        expires_at=now + timedelta(days=7),
     )
     db.add(invitation)
     db.commit()
@@ -259,8 +278,95 @@ def invite_member(
         email=invitation.email,
         role=invitation.role,
         status=invitation.status,
+        token=invitation.token,
         created_at=invitation.created_at,
+        expires_at=invitation.expires_at,
     )
+
+
+@router.get(
+    "/{institution_id}/invitations",
+    response_model=list[InstitutionInvitationResponse],
+)
+def list_invitations(
+    institution_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[InstitutionInvitationResponse]:
+    """List all invitations for an institution. Owner/admin or Developer/Admin only."""
+    institution = db.query(Institution).filter(Institution.id == institution_id).first()
+    if institution is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found")
+
+    if not _is_institution_admin(db, institution_id, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view invitations")
+
+    now = datetime.now(UTC)
+    invitations = (
+        db.query(InstitutionInvitation)
+        .filter(InstitutionInvitation.institution_id == institution_id)
+        .order_by(InstitutionInvitation.created_at.desc())
+        .all()
+    )
+
+    # Mark stale pending invitations as expired on read so the UI shows correct state.
+    dirty = False
+    for inv in invitations:
+        if inv.status == "pending" and inv.expires_at and inv.expires_at < now:
+            inv.status = "expired"
+            dirty = True
+    if dirty:
+        db.commit()
+
+    return [
+        InstitutionInvitationResponse(
+            id=inv.id,
+            email=inv.email,
+            role=inv.role,
+            status=inv.status,
+            token=inv.token,
+            created_at=inv.created_at,
+            expires_at=inv.expires_at,
+        )
+        for inv in invitations
+    ]
+
+
+@router.delete(
+    "/{institution_id}/invitations/{invitation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def cancel_invitation(
+    institution_id: str,
+    invitation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Cancel (delete) an invitation. Owner/admin or Developer/Admin only."""
+    invitation = (
+        db.query(InstitutionInvitation)
+        .filter(
+            InstitutionInvitation.id == invitation_id,
+            InstitutionInvitation.institution_id == institution_id,
+        )
+        .first()
+    )
+    if invitation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    if not _is_institution_admin(db, institution_id, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to cancel invitations")
+
+    if invitation.status == "accepted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel an already accepted invitation",
+        )
+
+    db.delete(invitation)
+    db.commit()
+
+    logger.info(f"User {current_user.id} cancelled invitation {invitation_id} for institution {institution_id}")
 
 
 @router.post("/invitations/{token}/accept", response_model=InstitutionMemberResponse)

@@ -47,3 +47,14 @@ class InstitutionAnalytics(BaseModel):
     total_projects: int
     total_exams_graded: int
     average_score_percentage: float | None
+
+
+class ClassAnalytics(BaseModel):
+    class_id: str
+    class_name: str
+    semester: str
+    total_students: int
+    total_projects: int
+    total_exams_graded: int
+    average_score_percentage: float | None
+    pass_rate: float | None

@@ -1,3 +1,7 @@
+import os
+
+os.environ["TESTING"] = "1"
+
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
@@ -11,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.deps import get_db
 from app.database import Base
 from app.main import app
+from app.models.clase import Class, ClassEnrollment
 from app.models.project import Project, ProjectStatus
 from app.models.question import Question
 from app.models.user import User
@@ -120,6 +125,128 @@ def auth_token_2(test_user_2: User) -> str:
 def auth_headers_2(auth_token_2: str) -> dict[str, str]:
     """Auth headers for the second test user."""
     return {"Authorization": f"Bearer {auth_token_2}"}
+
+
+@pytest.fixture()
+def test_admin_user(db: Session) -> User:
+    """Create a test admin user."""
+    user = User(
+        id=str(uuid4()),
+        email="admin@example.com",
+        hashed_password=hash_password("adminpassword123"),
+        full_name="Admin User",
+        role="admin",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def test_student_user(db: Session) -> User:
+    """Create a test student user."""
+    user = User(
+        id=str(uuid4()),
+        email="student@example.com",
+        hashed_password=hash_password("studentpassword123"),
+        full_name="Student User",
+        role="student",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def test_developer_user(db: Session) -> User:
+    """Create a test developer user."""
+    user = User(
+        id=str(uuid4()),
+        email="developer@example.com",
+        hashed_password=hash_password("developerpassword123"),
+        full_name="Developer User",
+        role="developer",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def auth_token_admin(test_admin_user: User) -> str:
+    """Create an auth token for the admin user."""
+    return create_access_token(data={"sub": test_admin_user.id})
+
+
+@pytest.fixture()
+def auth_headers_admin(auth_token_admin: str) -> dict[str, str]:
+    """Auth headers for the admin user."""
+    return {"Authorization": f"Bearer {auth_token_admin}"}
+
+
+@pytest.fixture()
+def auth_token_student(test_student_user: User) -> str:
+    """Create an auth token for the student user."""
+    return create_access_token(data={"sub": test_student_user.id})
+
+
+@pytest.fixture()
+def auth_headers_student(auth_token_student: str) -> dict[str, str]:
+    """Auth headers for the student user."""
+    return {"Authorization": f"Bearer {auth_token_student}"}
+
+
+@pytest.fixture()
+def auth_token_developer(test_developer_user: User) -> str:
+    """Create an auth token for the developer user."""
+    return create_access_token(data={"sub": test_developer_user.id})
+
+
+@pytest.fixture()
+def auth_headers_developer(auth_token_developer: str) -> dict[str, str]:
+    """Auth headers for the developer user."""
+    return {"Authorization": f"Bearer {auth_token_developer}"}
+
+
+@pytest.fixture()
+def test_class(db: Session, test_user: User) -> Class:
+    """Create a test class owned by test_user."""
+    clase = Class(
+        id=str(uuid4()),
+        professor_id=test_user.id,
+        name="Algebra Lineal",
+        subject="Mathematics",
+        semester="2026-1",
+        description="Linear algebra course",
+        is_active=True,
+    )
+    db.add(clase)
+    db.commit()
+    db.refresh(clase)
+    return clase
+
+
+@pytest.fixture()
+def test_enrollment(db: Session, test_class: Class, test_student_user: User) -> ClassEnrollment:
+    """Create a test enrollment linking student to class."""
+    enrollment = ClassEnrollment(
+        id=str(uuid4()),
+        class_id=test_class.id,
+        student_name=test_student_user.full_name,
+        student_identifier="STU-001",
+        student_email=test_student_user.email,
+        user_id=test_student_user.id,
+    )
+    db.add(enrollment)
+    db.commit()
+    db.refresh(enrollment)
+    return enrollment
 
 
 @pytest.fixture()

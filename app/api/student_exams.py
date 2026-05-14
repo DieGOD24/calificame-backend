@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from app.config import settings
 from app.models.project import Project
 from app.models.student_exam import StudentExam
 from app.models.user import User
+from app.rate_limit import limiter
 from app.schemas.student_exam import (
     ExamAnswerResponse,
     GradingResultResponse,
@@ -22,17 +23,45 @@ router = APIRouter(prefix="/projects/{project_id}/exams", tags=["Student Exams"]
 
 
 @router.post("/upload", response_model=list[StudentExamResponse], status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_UPLOAD)
 async def upload_student_exams(
+    request: Request,
     project_id: str,
     files: list[UploadFile],
+    student_name: str | None = Form(None, max_length=255),
+    student_identifier: str | None = Form(None, max_length=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(get_user_project),
 ) -> list[StudentExam]:
-    """Upload one or more student exam files."""
+    """Upload one or more student exam files.
+
+    If `student_identifier` is provided, prevents duplicates: a project can only
+    have one exam per identifier. Anonymous bulk uploads (no identifier) are
+    always allowed.
+    """
     storage = get_storage_service()
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     created: list[StudentExam] = []
+
+    # Pre-check duplicate when student_identifier is provided
+    if student_identifier:
+        existing = (
+            db.query(StudentExam)
+            .filter(
+                StudentExam.project_id == project_id,
+                StudentExam.student_identifier == student_identifier,
+            )
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Ya existe un examen para el estudiante {student_identifier} "
+                    "en este proyecto. Eliminalo primero si quieres reemplazarlo."
+                ),
+            )
 
     for file in files:
         content_type = file.content_type or ""
@@ -62,6 +91,8 @@ async def upload_student_exams(
             file_path=storage_path,
             file_type=file_type,
             status="uploaded",
+            student_name=student_name,
+            student_identifier=student_identifier,
         )
         db.add(student_exam)
         created.append(student_exam)
@@ -74,7 +105,7 @@ async def upload_student_exams(
     return created
 
 
-@router.get("/", response_model=StudentExamListResponse)
+@router.get("", response_model=StudentExamListResponse)
 def list_student_exams(
     project_id: str,
     db: Session = Depends(get_db),
@@ -178,8 +209,10 @@ def delete_student_exam(
     try:
         storage = get_storage_service()
         storage.delete_file(exam.file_path)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to delete file {} for exam {}: {}", exam.file_path, exam_id, exc
+        )
 
     logger.info("Deleted exam {} from project {}", exam_id, project_id)
     db.delete(exam)

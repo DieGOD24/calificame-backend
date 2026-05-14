@@ -23,6 +23,7 @@ class Institution(Base):
 
     members = relationship("InstitutionMember", back_populates="institution", cascade="all, delete-orphan")
     invitations = relationship("InstitutionInvitation", back_populates="institution", cascade="all, delete-orphan")
+    classes = relationship("Class", back_populates="institution")
 
 
 class InstitutionMember(Base):
