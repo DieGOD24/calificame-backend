@@ -58,6 +58,8 @@ class InstitutionInvitationResponse(BaseModel):
     email: str
     role: str
     status: str
+    token: str
     created_at: datetime
+    expires_at: datetime
 
     model_config = {"from_attributes": True}
