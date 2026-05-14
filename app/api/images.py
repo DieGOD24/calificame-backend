@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import can_user_access_project, get_db
 from app.models.answer_key import AnswerKey
 from app.models.project import Project
 from app.models.student_exam import StudentExam
@@ -31,10 +31,19 @@ def _get_user_from_token(
 
 
 def _get_user_project(project_id: str, db: Session, current_user: User) -> Project:
+    """Fetch the project and reject if the caller cannot read it.
+
+    Image endpoints authenticate via query-param token (so <img> tags work),
+    so they can't use the shared ``get_user_project`` FastAPI dependency.
+    Instead, delegate the permission check to ``can_user_access_project``
+    so we honor the same rules everywhere else (project owner, class
+    professor, institution admin of a class linked to the project, or
+    global developer/admin).
+    """
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    if project.owner_id != current_user.id:
+    if not can_user_access_project(db, project, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return project
 
