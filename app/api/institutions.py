@@ -53,9 +53,7 @@ def _is_institution_admin(db: Session, institution_id: str, user: User) -> bool:
     return member is not None
 
 
-def _role_capacity_remaining(
-    db: Session, institution: Institution, role: str, *, count_pending: bool
-) -> int | None:
+def _role_capacity_remaining(db: Session, institution: Institution, role: str, *, count_pending: bool) -> int | None:
     """Return seats left for ``role`` in ``institution``, or ``None`` if uncapped.
 
     ``count_pending=True`` includes pending invitations toward the limit (used at
