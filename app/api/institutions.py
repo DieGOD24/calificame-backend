@@ -201,12 +201,34 @@ def update_institution(
 def delete_institution(
     institution_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.DEVELOPER, UserRole.ADMIN)),
+    current_user: User = Depends(get_current_active_user),
 ) -> None:
-    """Delete an institution. Only Developer or Admin role."""
+    """Delete an institution.
+
+    Allowed for global Developer/Admin (any institution) or for an
+    owner member of *this* institution. Plain admin members cannot
+    delete — only owners — to avoid an admin demolishing the institution
+    they were trusted to help administer.
+    """
     institution = db.query(Institution).filter(Institution.id == institution_id).first()
     if institution is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found")
+
+    if current_user.role not in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
+        owner_member = (
+            db.query(InstitutionMember)
+            .filter(
+                InstitutionMember.institution_id == institution_id,
+                InstitutionMember.user_id == current_user.id,
+                InstitutionMember.role == "owner",
+            )
+            .first()
+        )
+        if owner_member is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the institution owner (or a platform developer/admin) can delete an institution",
+            )
 
     db.delete(institution)
     db.commit()
