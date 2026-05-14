@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, get_db, require_role
 from app.config import settings
 from app.models.clase import Class, ClassEnrollment, ClassProject
+from app.models.institution import InstitutionMember
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.rate_limit import limiter
@@ -64,12 +65,43 @@ def _get_class_or_404(db: Session, class_id: str) -> Class:
     return clase
 
 
-def _check_class_owner(clase: Class, user: User) -> None:
-    """Check if the user is the class owner or admin/developer."""
+def _check_class_owner(clase: Class, user: User, db: Session | None = None) -> None:
+    """Check if the user can manage this class.
+
+    Allowed: global developer/admin, the class's professor, or — when ``db`` is
+    provided — an institution-role user who is owner/admin of the institution
+    that owns the class.
+    """
     if user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
         return
-    if clase.professor_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if clase.professor_id == user.id:
+        return
+    if (
+        db is not None
+        and user.role == UserRole.INSTITUTION.value
+        and clase.institution_id
+        and clase.institution_id in _institution_admin_ids(db, user)
+    ):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
+def _institution_admin_ids(db: Session, user: User) -> list[str]:
+    """Return institution IDs where ``user`` is an owner/admin member.
+
+    Used so users with the global ``institution`` role can manage the classes
+    that belong to the institutions they administer, even when they aren't the
+    teaching professor of the class.
+    """
+    rows = (
+        db.query(InstitutionMember.institution_id)
+        .filter(
+            InstitutionMember.user_id == user.id,
+            InstitutionMember.role.in_(["owner", "admin"]),
+        )
+        .all()
+    )
+    return [r[0] for r in rows]
 
 
 def _can_view_class(db: Session, clase: Class, user: User) -> bool:
@@ -77,6 +109,13 @@ def _can_view_class(db: Session, clase: Class, user: User) -> bool:
     if user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
         return True
     if clase.professor_id == user.id:
+        return True
+    # Institution-role users administer their institution's classes.
+    if (
+        user.role == UserRole.INSTITUTION.value
+        and clase.institution_id
+        and clase.institution_id in _institution_admin_ids(db, user)
+    ):
         return True
     # Check enrollment
     enrollment = (
@@ -163,7 +202,12 @@ def list_classes(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ClassListResponse:
-    """List classes. Professors see own, students see enrolled, admins see all."""
+    """List classes. Professors see own, students see enrolled, admins see all.
+
+    Institution-role users see every class in the institutions they administer
+    (owner/admin membership), so they can manage them from the UI even though
+    they aren't the teaching professor of any class.
+    """
     if current_user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
         query = db.query(Class)
     elif current_user.role == UserRole.STUDENT.value:
@@ -171,6 +215,13 @@ def list_classes(
             db.query(ClassEnrollment.class_id).filter(ClassEnrollment.user_id == current_user.id).scalar_subquery()
         )
         query = db.query(Class).filter(Class.id.in_(enrolled_class_ids))
+    elif current_user.role == UserRole.INSTITUTION.value:
+        admin_inst_ids = _institution_admin_ids(db, current_user)
+        if admin_inst_ids:
+            query = db.query(Class).filter(Class.institution_id.in_(admin_inst_ids))
+        else:
+            # Institution role without any admin/owner membership — show nothing.
+            query = db.query(Class).filter(Class.id == "__never__")
     else:
         query = db.query(Class).filter(Class.professor_id == current_user.id)
 
@@ -215,7 +266,7 @@ def update_class(
     rules.
     """
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     update_data = data.model_dump(exclude_unset=True)
 
@@ -266,7 +317,7 @@ def delete_class(
 ) -> None:
     """Delete a class and cascade to enrollments and class projects."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     db.delete(clase)
     db.commit()
@@ -289,7 +340,7 @@ def add_enrollment(
 ) -> ClassEnrollmentResponse:
     """Add a single student to the class."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     # Check duplicate
     existing = (
@@ -342,7 +393,7 @@ async def bulk_enroll(
     Spanish column names, etc). If nothing is extracted, falls back to GPT-4o.
     """
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     # Read file once so we can try the AI fallback if the heuristic fails.
     content = await file.read()
@@ -491,7 +542,7 @@ def remove_enrollment(
 ) -> None:
     """Remove a student from the class."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     enrollment = (
         db.query(ClassEnrollment)
@@ -525,7 +576,7 @@ def add_class_project(
 ) -> ClassProjectResponse:
     """Link a project to a class."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     # Verify project exists and belongs to the professor
     project = db.query(Project).filter(Project.id == data.project_id).first()
@@ -607,7 +658,7 @@ def remove_class_project(
 ) -> None:
     """Unlink a project from a class."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     cp = (
         db.query(ClassProject)
@@ -634,7 +685,7 @@ def reorder_class_projects(
 ) -> list[ClassProjectResponse]:
     """Reorder projects in a class by providing ordered list of class_project IDs."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     class_projects = db.query(ClassProject).filter(ClassProject.class_id == class_id).all()
     cp_map = {cp.id: cp for cp in class_projects}
@@ -665,7 +716,7 @@ def get_gradebook(
     """Get the full gradebook for a class."""
     clase = _get_class_or_404(db, class_id)
     # Only professor/admin can see the full gradebook
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
     return build_gradebook(db, clase)
 
 
@@ -678,7 +729,7 @@ def export_gradebook(
 ) -> StreamingResponse:
     """Export the gradebook as CSV or XLSX."""
     clase = _get_class_or_404(db, class_id)
-    _check_class_owner(clase, current_user)
+    _check_class_owner(clase, current_user, db)
 
     gradebook = build_gradebook(db, clase)
 
