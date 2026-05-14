@@ -66,6 +66,63 @@ class TestCreateClass:
         )
         assert response.status_code == 401
 
+    def test_admin_can_assign_professor_id(
+        self,
+        client: TestClient,
+        test_admin_user,
+        test_user,
+        auth_headers_admin: dict,
+    ) -> None:
+        """Admin/developer/institution may pick an existing teaching-role user as the class professor."""
+        response = client.post(
+            "/api/v1/classes/",
+            headers=auth_headers_admin,
+            json={
+                "name": "Assigned Class",
+                "subject": "X",
+                "semester": "2026-1",
+                "professor_id": test_user.id,  # test_user has role=professor
+            },
+        )
+        assert response.status_code == 201, response.text
+        data = response.json()
+        assert data["professor_id"] == test_user.id
+
+    def test_cannot_assign_student_as_professor(
+        self,
+        client: TestClient,
+        auth_headers_admin: dict,
+        db,
+    ) -> None:
+        """Non-teaching roles (student / institution) must be rejected as professor_id."""
+        from uuid import uuid4
+        from app.models.user import User
+        from app.services.auth import hash_password
+
+        student = User(
+            id=str(uuid4()),
+            email="rejected-student@example.com",
+            hashed_password=hash_password("x" * 16),
+            full_name="Student User",
+            role="student",
+            is_active=True,
+        )
+        db.add(student)
+        db.commit()
+
+        response = client.post(
+            "/api/v1/classes/",
+            headers=auth_headers_admin,
+            json={
+                "name": "Bad Assignment",
+                "subject": "X",
+                "semester": "2026-1",
+                "professor_id": student.id,
+            },
+        )
+        assert response.status_code == 400
+        assert "cannot be a professor" in response.json()["detail"]
+
 
 class TestListClasses:
     def test_professor_sees_own_classes(self, client: TestClient, test_class: Class, auth_headers: dict) -> None:

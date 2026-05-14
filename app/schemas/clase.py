@@ -12,6 +12,10 @@ class ClassCreate(BaseModel):
     description: str | None = None
     schedule: str | None = None
     institution_id: str | None = None
+    # Optional explicit professor. When omitted, the creator becomes the
+    # professor (legacy default). Used by developer/admin/institution roles
+    # to create a class on behalf of an actual teacher.
+    professor_id: str | None = None
 
 
 class ClassUpdate(BaseModel):
