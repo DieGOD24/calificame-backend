@@ -53,6 +53,46 @@ def _is_institution_admin(db: Session, institution_id: str, user: User) -> bool:
     return member is not None
 
 
+def _role_capacity_remaining(
+    db: Session, institution: Institution, role: str, *, count_pending: bool
+) -> int | None:
+    """Return seats left for ``role`` in ``institution``, or ``None`` if uncapped.
+
+    ``count_pending=True`` includes pending invitations toward the limit (used at
+    invite time so we don't promise seats we can't honor). At accept time we
+    pass ``False`` because the invitation row is being settled into a member row.
+    Only the professor and student roles are capped; owner/admin are unbounded.
+    """
+    if role == "professor":
+        cap = institution.max_professors
+    elif role == "student":
+        cap = institution.max_students
+    else:
+        return None
+    if cap is None:
+        return None
+
+    used = (
+        db.query(InstitutionMember)
+        .filter(
+            InstitutionMember.institution_id == institution.id,
+            InstitutionMember.role == role,
+        )
+        .count()
+    )
+    if count_pending:
+        used += (
+            db.query(InstitutionInvitation)
+            .filter(
+                InstitutionInvitation.institution_id == institution.id,
+                InstitutionInvitation.role == role,
+                InstitutionInvitation.status == "pending",
+            )
+            .count()
+        )
+    return cap - used
+
+
 @router.post("", response_model=InstitutionResponse, status_code=status.HTTP_201_CREATED)
 def create_institution(
     data: InstitutionCreate,
@@ -262,6 +302,18 @@ def invite_member(
             detail="A pending invitation already exists for this email",
         )
 
+    remaining = _role_capacity_remaining(db, institution, data.role, count_pending=True)
+    if remaining is not None and remaining <= 0:
+        cap_field = "max_professors" if data.role == "professor" else "max_students"
+        cap_value = getattr(institution, cap_field)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Institution has reached its {cap_field} cap ({cap_value}). "
+                "Raise the limit or remove existing members/invitations before inviting more."
+            ),
+        )
+
     invitation = InstitutionInvitation(
         institution_id=institution_id,
         email=data.email,
@@ -423,6 +475,22 @@ def accept_invitation(
         invitation.status = "accepted"
         db.commit()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already a member of this institution")
+
+    # Re-check the role cap at accept time — the limit may have been lowered, or
+    # the institution may have filled up while this invitation sat in the inbox.
+    institution = db.query(Institution).filter(Institution.id == invitation.institution_id).first()
+    if institution is not None:
+        remaining = _role_capacity_remaining(db, institution, invitation.role, count_pending=False)
+        if remaining is not None and remaining <= 0:
+            cap_field = "max_professors" if invitation.role == "professor" else "max_students"
+            cap_value = getattr(institution, cap_field)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Institution has reached its {cap_field} cap ({cap_value}). "
+                    "Ask an admin to raise the limit or remove an existing member."
+                ),
+            )
 
     # Create member
     member = InstitutionMember(
