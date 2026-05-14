@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.clase import Class, ClassProject
+from app.models.institution import InstitutionMember
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.services.auth import decode_access_token
@@ -83,6 +84,10 @@ def can_user_access_project(db: Session, project: Project, user: User) -> bool:
       class professor could see her gradebook but was 403'd on every
       `/projects/{id}/...` endpoint, including grading summary, exam list
       and analytics. (See QA report V3 — "media perdida" — for repro.)
+    - An institution-role user who is owner/admin of an institution whose
+      class links to this project. Without this, an institution admin
+      could see classes via /classes but every project they touched
+      returned 403 (see institution QA report — Bug #8).
     """
     if user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
         return True
@@ -96,7 +101,28 @@ def can_user_access_project(db: Session, project: Project, user: User) -> bool:
         .filter(Class.professor_id == user.id)
         .first()
     )
-    return linked_class_professor_id is not None
+    if linked_class_professor_id is not None:
+        return True
+    # Is the user an institution admin of an institution whose class links to this project?
+    if user.role == UserRole.INSTITUTION.value:
+        admin_inst_ids_subq = (
+            db.query(InstitutionMember.institution_id)
+            .filter(
+                InstitutionMember.user_id == user.id,
+                InstitutionMember.role.in_(["owner", "admin"]),
+            )
+            .scalar_subquery()
+        )
+        institution_match = (
+            db.query(Class.institution_id)
+            .join(ClassProject, ClassProject.class_id == Class.id)
+            .filter(ClassProject.project_id == project.id)
+            .filter(Class.institution_id.in_(admin_inst_ids_subq))
+            .first()
+        )
+        if institution_match is not None:
+            return True
+    return False
 
 
 def get_user_project(
