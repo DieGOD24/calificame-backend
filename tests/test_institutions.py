@@ -153,9 +153,7 @@ class TestDeleteInstitution:
         response = client.delete(f"/api/v1/institutions/{inst.id}", headers=auth_headers)
         assert response.status_code == 403
 
-    def test_institution_owner_can_delete_own(
-        self, client: TestClient, db: Session
-    ) -> None:
+    def test_institution_owner_can_delete_own(self, client: TestClient, db: Session) -> None:
         """A user with global role=institution who is the owner member of their
         institution can delete it themselves — they no longer need a global admin.
         """
