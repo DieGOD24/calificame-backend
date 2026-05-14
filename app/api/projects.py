@@ -39,9 +39,36 @@ def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
-    """List all projects for the current user. Developer/Admin see all."""
+    """List all projects for the current user.
+
+    Developer/Admin see everything. An institution-role user sees their own
+    projects plus every project linked (via ClassProject) to a class in an
+    institution they administer — otherwise they'd be blind to the grading
+    work happening inside their own institution.
+    """
     if current_user.role in (UserRole.DEVELOPER.value, UserRole.ADMIN.value):
         query = db.query(Project)
+    elif current_user.role == UserRole.INSTITUTION.value:
+        from app.models.clase import Class, ClassProject
+        from app.models.institution import InstitutionMember
+
+        admin_inst_ids_subq = (
+            db.query(InstitutionMember.institution_id)
+            .filter(
+                InstitutionMember.user_id == current_user.id,
+                InstitutionMember.role.in_(["owner", "admin"]),
+            )
+            .scalar_subquery()
+        )
+        inst_project_ids_subq = (
+            db.query(ClassProject.project_id)
+            .join(Class, Class.id == ClassProject.class_id)
+            .filter(Class.institution_id.in_(admin_inst_ids_subq))
+            .scalar_subquery()
+        )
+        query = db.query(Project).filter(
+            (Project.owner_id == current_user.id) | (Project.id.in_(inst_project_ids_subq))
+        )
     else:
         query = db.query(Project).filter(Project.owner_id == current_user.id)
 
