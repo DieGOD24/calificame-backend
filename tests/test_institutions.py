@@ -1,9 +1,10 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.institution import Institution, InstitutionMember
+from app.models.institution import Institution, InstitutionInvitation, InstitutionMember
 from app.models.user import User
 
 
@@ -272,3 +273,57 @@ class TestMembers:
             json={"role": "admin"},
         )
         assert response.status_code == 400
+
+
+class TestListInvitations:
+    def test_list_returns_pending_invitations(
+        self, client: TestClient, db: Session, test_admin_user: User, auth_headers_admin: dict
+    ) -> None:
+        inst = _make_institution(db, test_admin_user, slug="list-inv")
+        client.post(
+            f"/api/v1/institutions/{inst.id}/members/invite",
+            headers=auth_headers_admin,
+            json={"email": "pending@example.com", "role": "professor"},
+        )
+
+        response = client.get(f"/api/v1/institutions/{inst.id}/invitations", headers=auth_headers_admin)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["email"] == "pending@example.com"
+        assert data[0]["status"] == "pending"
+        assert data[0]["token"]  # token is exposed for the copy-link UX
+        assert data[0]["expires_at"]
+
+    def test_list_marks_stale_pending_as_expired(
+        self, client: TestClient, db: Session, test_admin_user: User, auth_headers_admin: dict
+    ) -> None:
+        """Regression: comparing naive expires_at with aware datetime crashed in Postgres (500).
+
+        We insert an invitation whose `expires_at` is already in the past, stored as a naive UTC
+        datetime (matching production schema). GET /invitations must NOT raise — instead it should
+        flip the invitation to `expired` and return 200.
+        """
+        inst = _make_institution(db, test_admin_user, slug="stale-inv")
+        past_naive = (datetime.now(UTC) - timedelta(days=10)).replace(tzinfo=None)
+        stale = InstitutionInvitation(
+            id=str(uuid4()),
+            institution_id=inst.id,
+            email="old@example.com",
+            role="professor",
+            token=str(uuid4()),
+            status="pending",
+            invited_by=test_admin_user.id,
+            expires_at=past_naive,
+        )
+        db.add(stale)
+        db.commit()
+
+        response = client.get(f"/api/v1/institutions/{inst.id}/invitations", headers=auth_headers_admin)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "expired"
+
+        db.refresh(stale)
+        assert stale.status == "expired"
