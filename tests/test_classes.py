@@ -88,6 +88,67 @@ class TestCreateClass:
         data = response.json()
         assert data["professor_id"] == test_user.id
 
+    def test_institution_admin_sees_classes_in_their_institution(
+        self,
+        client: TestClient,
+        db,
+        test_admin_user,
+        test_user,
+        auth_headers_admin: dict,
+    ) -> None:
+        """An institution-role owner should see every class of their institution,
+        even classes they did not teach.
+        """
+        from uuid import uuid4
+
+        from app.models.clase import Class
+        from app.models.institution import Institution, InstitutionMember
+        from app.models.user import User
+        from app.services.auth import create_access_token, hash_password
+
+        # Create an institution-role user and make them owner of a fresh institution.
+        inst_user = User(
+            id=str(uuid4()),
+            email="inst-owner@example.com",
+            hashed_password=hash_password("x" * 16),
+            full_name="Inst Owner",
+            role="institution",
+            is_active=True,
+        )
+        db.add(inst_user)
+        inst = Institution(id=str(uuid4()), name="See Mine", slug="see-mine-inst")
+        db.add(inst)
+        db.flush()
+        db.add(
+            InstitutionMember(
+                id=str(uuid4()),
+                user_id=inst_user.id,
+                institution_id=inst.id,
+                role="owner",
+            )
+        )
+        # A class in that institution taught by test_user (a professor) — the
+        # institution-role user did NOT create it but should still see it.
+        clase = Class(
+            id=str(uuid4()),
+            professor_id=test_user.id,
+            institution_id=inst.id,
+            name="Their Class",
+            subject="Mathematics",
+            semester="2026-1",
+        )
+        db.add(clase)
+        db.commit()
+
+        token = create_access_token(data={"sub": inst_user.id})
+        response = client.get(
+            "/api/v1/classes/",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200, response.text
+        ids = [c["id"] for c in response.json()["items"]]
+        assert clase.id in ids
+
     def test_cannot_assign_student_as_professor(
         self,
         client: TestClient,
