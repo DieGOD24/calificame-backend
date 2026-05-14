@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.models.project import Project
+from app.models.user import User
 
 
 class TestCreateProject:
@@ -150,9 +151,7 @@ class TestGetProject:
         )
         assert response.status_code == 200, response.text
         # List endpoint: the project shows up too.
-        list_response = client.get(
-            "/api/v1/projects/", headers={"Authorization": f"Bearer {token}"}
-        )
+        list_response = client.get("/api/v1/projects/", headers={"Authorization": f"Bearer {token}"})
         assert list_response.status_code == 200
         ids = [p["id"] for p in list_response.json()["items"]]
         assert test_project.id in ids
